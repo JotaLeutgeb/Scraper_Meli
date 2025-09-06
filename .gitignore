@@ -1,0 +1,67 @@
+# ###########################
+# ## Archivos de Entorno y Credenciales
+# ## ¡CRÍTICO! Nunca subir estos archivos a GitHub.
+# ###########################
+.env
+cookies.json
+
+# ###########################
+# ## Dependencias y Entornos Virtuales de Python
+# ## Ignoramos las librerías instaladas para que cada desarrollador
+# ## las instale desde requirements.txt.
+# ###########################
+venv/
+.venv/
+env/
+.env/
+*.egg-info/
+pip-wheel-metadata/
+
+# ###########################
+# ## Archivos compilados y Caché de Python
+# ## Generados automáticamente por Python. No son parte del código fuente.
+# ###########################
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ###########################
+# ## Archivos de IDE y Editores de Código
+# ## Configuraciones locales del entorno de desarrollo de cada persona.
+# ###########################
+# Visual Studio Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# ###########################
+# ## Artefactos de Playwright
+# ## Reportes, resultados de tests y caché de navegadores.
+# ###########################
+playwright-report/
+test-results/
+ms-playwright/
+
+# ###########################
+# ## Archivos de Registro (Logs)
+# ## Ignoramos cualquier archivo de log que generemos para depuración.
+# ###########################
+*.log
+logs/
+
+# ###########################
+# ## Archivos del Sistema Operativo
+# ## Archivos de metadatos generados por macOS, Windows y Linux.
+# ###########################
+.DS_Store
+Thumbs.db
+._*
+
+# ###########################
+# ## Archivos de Configuración Local (Opcional)
+# ## Buena práctica si alguien necesita sobreescribir configuraciones
+# ## sin afectar el archivo principal.
+# ###########################
+config.local.yml
