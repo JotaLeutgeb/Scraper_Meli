@@ -1,8 +1,10 @@
+#generador kpis
 import pandas as pd
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from io import StringIO
+from urllib.parse import quote_plus
 
 def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_name: str):
     """
@@ -13,7 +15,13 @@ def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_n
     print("\nIniciando la generación de la foto diaria de KPIs...")
     
     # Usamos SQLAlchemy para una mejor integración con Pandas
-    conn_string = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    db_password_encoded = quote_plus(os.getenv('DB_PASSWORD'))
+
+    # 3. Construimos la cadena con la contraseña ya codificada
+    conn_string = f"postgresql://{os.getenv('DB_USER')}:{db_password_encoded}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    
+    # --- FIN DE LA CORRECCIÓN ---
+
     engine = create_engine(conn_string)
 
     # ==============================================================================

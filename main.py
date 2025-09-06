@@ -48,7 +48,6 @@ def main():
     
     print("-> Aleatorizando el orden de las URLs para evitar patrones predecibles...")
     random.shuffle(urls)
-    print(urls)
     
     if not all([urls, tabla_crudos, tabla_kpis, seller_name]):
         print(f"Error: Configuración incompleta para '{empresa_target}' en config.yml.")
