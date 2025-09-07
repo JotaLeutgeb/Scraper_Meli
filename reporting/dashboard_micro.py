@@ -1,8 +1,8 @@
 # dashboard_micro.py (Versión 3.1 - Herramienta de Análisis Táctico Mejorada)
 import streamlit as st
 import pandas as pd
-import psycopg2
-import os
+from sqlalchemy import create_engine
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 # Cargar las variables de entorno
@@ -11,27 +11,36 @@ load_dotenv()
 # Variable clave para identificar nuestra empresa en los datos
 NUESTRO_SELLER_NAME = "Delta Ferreteria Industrial"
 
-@st.cache_data(ttl=600)
-def cargar_datos_crudos(dias: int = 7) -> pd.DataFrame:
-    """
-    Se conecta a la BD y carga los datos de REGISTROS CRUDOS de los últimos 'dias'.
-    """
+@st.cache_engine
+def get_engine():
+    # Leemos las credenciales desde el gestor de secretos de Streamlit
+    db_user = st.secrets["db_user"]
+    db_password_raw = st.secrets["db_password"]
+    db_host = st.secrets["db_host"]
+    db_port = st.secrets["db_port"]
+    db_name = st.secrets["db_name"]
+
+    # Codificamos la contraseña para que sea segura en la URL
+    db_password_encoded = quote_plus(db_password_raw)
+
+    # Creamos la cadena de conexión
+    conn_string = f"postgresql://{db_user}:{db_password_encoded}@{db_host}:{db_port}/{db_name}"
+    
+    engine = create_engine(conn_string)
+    return engine
+
+
+# Función para cargar los datos
+@st.cache_data
+def load_data(tabla_crudos):
+    engine = get_engine()
     try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"), port=os.getenv("DB_PORT"),
-            dbname=os.getenv("DB_NAME"), user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD")
-        )
-        query = f"SELECT * FROM delta_registros_precios WHERE fecha_extraccion >= CURRENT_DATE - INTERVAL '{dias} days';"
-        df = pd.read_sql(query, conn)
-        df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
+        query = f"SELECT * FROM {tabla_crudos} ORDER BY fecha DESC"
+        df = pd.read_sql(query, engine)
         return df
     except Exception as e:
-        st.error(f"Error al conectar con la base de datos: {e}")
+        st.error(f"Error al cargar los datos: {e}")
         return pd.DataFrame()
-    finally:
-        if 'conn' in locals() and conn is not None:
-            conn.close()
 
 # Función para resaltar nuestra fila en el DataFrame
 def highlight_nuestro_seller(row):
@@ -51,7 +60,7 @@ st.title("🔬 Análisis Táctico de Competencia")
 st.markdown("Use los filtros para analizar un segmento específico del mercado y comparar nuestra oferta.")
 
 # Cargar los datos crudos
-df_crudo = cargar_datos_crudos(dias=30)
+df_crudo = load_data(dias=30)
 
 if df_crudo.empty:
     st.warning("No se encontraron datos. Verifique la ejecución del pipeline.")
