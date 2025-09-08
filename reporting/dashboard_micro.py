@@ -276,6 +276,8 @@ if productos_disponibles:
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
     if not df_tendencia.empty:
+        # --- LÓGICA DE NEGOCIO PARA FILTRAR SERIES (SE MANTIENE) ---
+
         # 1. Aislar nuestros datos y encontrar nuestro precio actual
         df_nuestro = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
         nuestro_precio_actual = 0
@@ -283,71 +285,47 @@ if productos_disponibles:
             fecha_mas_reciente_nuestra = df_nuestro['fecha_extraccion'].max()
             nuestro_precio_actual = df_nuestro[df_nuestro['fecha_extraccion'] == fecha_mas_reciente_nuestra]['precio'].iloc[0]
 
-        # 2. Identificar la fila completa del líder de cada día
+        # 2. Identificar al líder de cada día
         df_lider_diario = df_tendencia.loc[df_tendencia.groupby('fecha_extraccion')['precio'].idxmin()].copy()
-        df_lider_diario['serie'] = 'Líder del Mercado'
-
-        # 3. Lógica para seleccionar solo competidores relevantes
+        
+        # 3. Seleccionar solo competidores relevantes
         df_hoy = df_tendencia[df_tendencia['fecha_extraccion'] == fecha_maxima].sort_values('precio').reset_index()
         vendedores_relevantes = []
         if nuestro_precio_actual > 0 and not df_hoy.empty:
             lider_hoy = df_hoy.iloc[0]['nombre_vendedor']
             if lider_hoy == NUESTRO_SELLER_NAME:
-                # Si somos líderes, el relevante es el segundo (si existe)
                 if len(df_hoy) > 1:
                     vendedores_relevantes.append(df_hoy.iloc[1]['nombre_vendedor'])
             else:
-                # Si no somos líderes, los relevantes son todos los que están más baratos que nosotros
                 vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
         
-        # 4. Construir el DataFrame final para el gráfico
-        df_nuestro['serie'] = 'Nuestra Empresa'
-        df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
-        df_competidores['serie'] = df_competidores['nombre_vendedor'] # El nombre del competidor será la serie
+        # --- PREPARACIÓN DEL DATAFRAME PARA st.line_chart ---
 
-        df_plot_final = pd.concat([df_nuestro, df_lider_diario, df_competidores]).drop_duplicates(
+        # 4. Asignar un nombre de serie a cada grupo de datos
+        df_nuestro['serie'] = 'Nuestra Empresa'
+        df_lider_diario['serie'] = 'Líder del Mercado'
+        df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
+        df_competidores['serie'] = df_competidores['nombre_vendedor']
+
+        # 5. Combinar todos los datos relevantes en un solo DataFrame "largo"
+        df_largo = pd.concat([df_nuestro, df_lider_diario, df_competidores]).drop_duplicates(
             subset=['fecha_extraccion', 'precio', 'serie']
         ).reset_index(drop=True)
-        
-        # 5. Si no hay datos para graficar tras el filtro, mostrar un mensaje
-        if df_plot_final.empty:
-            st.info("No hay datos históricos suficientes para los competidores relevantes en este contexto.")
+
+        # 6. CAMBIO CLAVE: Pivotear la tabla a formato "ancho"
+        # st.line_chart necesita que cada línea sea una columna.
+        if not df_largo.empty:
+            df_para_grafico = df_largo.pivot_table(
+                index='fecha_extraccion',
+                columns='serie',
+                values='precio'
+            )
+
+            # 7. GRAFICAR CON st.line_chart (Simple y directo)
+            st.info("Mostrando su empresa, el líder del mercado y los competidores con precio inferior al suyo.")
+            st.line_chart(df_para_grafico)
         else:
-            # 6. Definir colores para las series principales
-            domain = ['Nuestra Empresa', 'Líder del Mercado'] + vendedores_relevantes
-            range_ = ['#2ECC71', '#FF4B4B'] + ['#3498DB', '#9B59B6', '#E67E22'] # Verde, Rojo y otros colores para competidores
-
-            # 7. Crear el gráfico con capas
-            base = alt.Chart(df_plot_final).encode(
-                x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
-                y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False))
-            )
-            
-            lines = base.mark_line().encode(
-                color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda")),
-                detail='serie:N' # Agrupa por serie para trazar líneas
-            )
-            
-            points = base.mark_point(size=60, filled=True).encode(
-                color=alt.Color('serie:N'),
-                tooltip=[
-                    alt.Tooltip('fecha_extraccion:T', format='%d/%m/%Y'),
-                    alt.Tooltip('serie:N', title='Vendedor'),
-                    alt.Tooltip('precio:Q', format='$,.2f')
-                ]
-            )
-
-            stars = alt.Chart(df_lider_diario).mark_point(shape='star', size=200, filled=True, color='#FFD700').encode(
-                x='fecha_extraccion:T',
-                y='precio:Q',
-                tooltip=[alt.Tooltip('nombre_vendedor:N', title='Líder del día')]
-            )
-
-            chart_final = (lines + points + stars).interactive().properties(height=350)
-            st.altair_chart(chart_final, use_container_width=True)
-
-    else:
-        st.info("No hay suficientes datos históricos para mostrar una tendencia.")
+            st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
 
     # --- TABLA DE DATOS DETALLADA ---
     with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
