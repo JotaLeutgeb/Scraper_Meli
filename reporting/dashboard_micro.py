@@ -285,56 +285,61 @@ if productos_disponibles:
 
         # 3. Verificamos si tenemos publicaciones para mostrar
         if not df_nuestras_publicaciones.empty:
-            # Renombramos las publicaciones para que sean más legibles en la leyenda
+            # Renombramos las publicaciones para que sean más legibles
             pubs_unicas = df_nuestras_publicaciones['link_publicacion'].unique()
             nombres_amigables = {link: f"Nuestra Pub. {i+1} ({link.split('/')[3].replace('-', ' ')})" for i, link in enumerate(pubs_unicas)}
             df_nuestras_publicaciones['serie'] = df_nuestras_publicaciones['link_publicacion'].map(nombres_amigables)
 
-            # 4. Combinamos los datos del líder y los nuestros en un solo DataFrame (formato largo)
+            # 4. Combinamos los datos del líder y los nuestros
             df_plot_final = pd.concat([
                 df_lider_diario[['fecha_extraccion', 'precio', 'serie']],
                 df_nuestras_publicaciones[['fecha_extraccion', 'precio', 'serie']]
             ])
+            
+            ### CAMBIO CLAVE 1: Crear una columna 'estado' para el estilo visual
+            # Copiamos la 'serie' a 'estado' para tener una base. 'serie' se mantendrá intacta.
+            df_plot_final['estado'] = df_plot_final['serie']
 
-            # 5. LÓGICA CLAVE: Manejo de superposición cuando somos líderes
-            # Creamos un df con los precios del líder por día para hacer el merge de forma segura,
-            # seleccionando solo las columnas necesarias para no crear conflictos de nombres.
+            # 5. LÓGICA DE SUPERPOSICIÓN (ahora modifica la columna 'estado')
             df_precios_lider_map = df_lider_diario[['fecha_extraccion', 'precio']].rename(columns={'precio': 'precio_lider'})
             df_plot_final = pd.merge(df_plot_final, df_precios_lider_map, on='fecha_extraccion')
             
-            # Ahora que tenemos la columna 'serie' intacta, esta máscara funciona correctamente.
             somos_lider_mask = (df_plot_final['serie'] != 'Líder') & (df_plot_final['precio'] == df_plot_final['precio_lider'])
-            df_plot_final.loc[somos_lider_mask, 'serie'] = df_plot_final['serie'] + ' (Líder)'
+            
+            # Modificamos la columna 'estado', no 'serie'
+            df_plot_final.loc[somos_lider_mask, 'estado'] = df_plot_final['serie'] + ' (Líder)'
 
-            # Removemos la línea original "Líder" en los días que una de nuestras pubs ya es marcada como líder
             fechas_donde_somos_lider = df_plot_final[somos_lider_mask]['fecha_extraccion'].unique()
             df_plot_final = df_plot_final[~((df_plot_final['serie'] == 'Líder') & (df_plot_final['fecha_extraccion'].isin(fechas_donde_somos_lider)))]
-
         else:
-            # Si no tenemos publicaciones, el DataFrame final solo contiene al líder
             df_plot_final = df_lider_diario
-        
+            df_plot_final['estado'] = df_plot_final['serie'] # Aseguramos que la columna 'estado' exista siempre
+
+        ### CAMBIO CLAVE 2: La lógica de colores ahora se basa en la columna 'estado'
         # 6. Definimos los colores para mantener la consistencia
-        # Usamos sorted para un orden predecible en la leyenda
-        series_unicas = sorted(df_plot_final['serie'].unique())
-        domain = ['Líder'] + [s for s in series_unicas if s != 'Líder']
+        estados_unicos = sorted(df_plot_final['estado'].unique())
+        domain = ['Líder'] + [s for s in estados_unicos if s != 'Líder']
         range_ = []
-        for serie_name in domain:
-            if '(Líder)' in serie_name:
+        for estado_name in domain:
+            if '(Líder)' in estado_name:
                 range_.append('#2ECC71') # Verde brillante si somos líderes
-            elif 'Nuestra Pub' in serie_name:
+            elif 'Nuestra Pub' in estado_name:
                 range_.append('#2ECC71') # Verde para nuestras publicaciones
-            elif serie_name == 'Líder':
+            elif estado_name == 'Líder':
                 range_.append('#FF4B4B') # Rojo para el competidor líder
 
+        ### CAMBIO CLAVE 3: Ajuste del 'encode' en Altair
         # 7. Creamos el gráfico con ALTAIR
         chart_tendencia = alt.Chart(df_plot_final).mark_line(point=True).encode(
             x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
             y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False)),
-            color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación")),
+            # El color se basa en 'estado', que cambia.
+            color=alt.Color('estado:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación")),
+            # 'detail' le dice a Altair que agrupe por 'serie' para trazar la línea, independientemente del color.
+            detail='serie:N', 
             tooltip=[
                 alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
-                alt.Tooltip('serie:N', title='Publicación'),
+                alt.Tooltip('serie:N', title='Publicación'), # Mostramos el nombre limpio y constante
                 alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
             ]
         ).properties(
@@ -345,8 +350,6 @@ if productos_disponibles:
 
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
-
-    st.markdown("---")
 
     # --- TABLA DE DATOS DETALLADA ---
     with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
