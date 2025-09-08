@@ -32,15 +32,19 @@ def get_engine():
 
 # Función para cargar los datos
 @st.cache_data
-def load_data(tabla_crudos):
+def load_data(tabla_crudos: str): # Definimos el parámetro correctamente
     engine = get_engine()
     try:
-        query = f"SELECT * FROM {tabla_crudos} ORDER BY fecha DESC"
+        # La consulta ahora usa el parámetro 'tabla_crudos'
+        query = f"SELECT * FROM {tabla_crudos} WHERE fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion DESC"
         df = pd.read_sql(query, engine)
+        # Convertimos la columna de fecha para asegurar la compatibilidad con el filtro
+        df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
         return df
     except Exception as e:
         st.error(f"Error al cargar los datos: {e}")
         return pd.DataFrame()
+
 
 # Función para resaltar nuestra fila en el DataFrame
 def highlight_nuestro_seller(row):
@@ -60,8 +64,7 @@ st.title("🔬 Análisis Táctico de Competencia")
 st.markdown("Use los filtros para analizar un segmento específico del mercado y comparar nuestra oferta.")
 
 # Cargar los datos crudos
-df_crudo = load_data(dias=30)
-
+df_crudo = load_data(tabla_crudos="delta_registros_precios") 
 if df_crudo.empty:
     st.warning("No se encontraron datos. Verifique la ejecución del pipeline.")
 else:
