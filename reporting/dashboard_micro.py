@@ -253,4 +253,71 @@ if productos_disponibles:
             order=alt.Order('orden_render:Q', sort='ascending'),
             tooltip=['nombre_vendedor', alt.Tooltip('precio', format='$,.2f')]
         ).properties(height=300).interactive()
-        st.altair_chart(chart, use_container
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("No hay datos para mostrar en el gráfico de panorama de precios para el contexto seleccionado.")
+
+    st.markdown("---")
+
+    # --- ANÁLISIS CON IA ---
+    st.subheader("🤖 Asistente de Estrategia IA")
+    if not df_contexto_display.empty:
+        with st.spinner("La IA está analizando la situación..."):
+            pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
+            posicion_para_ia = int(posicion_str.replace("#", "")) if '#' in posicion_str else posicion_str
+            sugerencia = obtener_sugerencia_ia(
+                producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio_display,
+                posicion=posicion_para_ia, nombre_lider=nombre_lider, precio_lider=precio_lider,
+                competidores_contexto=len(df_contexto_display), total_competidores=len(df_dia), pct_full=pct_full_contexto)
+            st.markdown(sugerencia)
+    else:
+        st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
+
+    st.markdown("---")
+    
+    # --- Gráfico de Tendencia (VERSIÓN SIMPLE Y ESTABLE) ---
+    st.subheader("Evolución de Precios (Últimos 15 días)")
+    df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
+    
+    if not df_tendencia.empty:
+        # 1. Calcular el precio del líder por día
+        df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index().rename(columns={'precio': 'precio_lider'})
+        
+        # 2. Aislar nuestras publicaciones y pivotar
+        df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME]
+        
+        if not df_nuestras_publicaciones.empty:
+            # Crear nombres amigables para las columnas
+            pubs_unicas = df_nuestras_publicaciones['link_publicacion'].unique()
+            nombres_amigables = {link: f"Nuestra Pub. {i+1}" for i, link in enumerate(pubs_unicas)}
+            df_nuestras_publicaciones['serie'] = df_nuestras_publicaciones['link_publicacion'].map(nombres_amigables)
+            
+            df_pivot_nuestro = df_nuestras_publicaciones.pivot_table(index='fecha_extraccion', columns='serie', values='precio')
+            
+            # 3. Unir los datos para el gráfico
+            df_plot = pd.merge(df_lider_diario, df_pivot_nuestro, on='fecha_extraccion', how='left')
+        else:
+            df_plot = df_lider_diario
+            
+        # 4. Graficar con st.line_chart
+        st.line_chart(df_plot.set_index('fecha_extraccion'))
+    else:
+        st.info("No hay datos históricos suficientes para mostrar una tendencia.")
+
+    st.markdown("---")
+
+    # --- TABLA DE DATOS DETALLADA ---
+    with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
+        if not df_contexto_display.empty:
+            columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
+            columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
+            st.dataframe(
+                df_contexto_display[columnas_existentes_tabla].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+                use_container_width=True, hide_index=True)
+        else:
+            st.write("Tabla vacía para el contexto actual.")
+
+else:
+    # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
+    st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
+    st.info(f"Verifique que el pipeline para el cliente '{empresa_seleccionada}' se haya ejecutado correctamente.")
