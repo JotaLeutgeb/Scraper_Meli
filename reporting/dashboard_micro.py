@@ -11,7 +11,7 @@ load_dotenv()
 # Variable clave para identificar nuestra empresa en los datos
 NUESTRO_SELLER_NAME = "Delta Ferreteria Industrial"
 
-@st.cache_engine
+@st.cache_resource
 def get_engine():
     # Leemos las credenciales desde el gestor de secretos de Streamlit
     db_user = st.secrets["db_user"]
