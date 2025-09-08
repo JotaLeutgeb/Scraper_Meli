@@ -254,22 +254,6 @@ if productos_disponibles:
         st.info("No hay datos para mostrar en el gráfico de panorama de precios para el contexto seleccionado.")
 
     st.markdown("---")
-
-    # --- ANÁLISis CON IA ---
-    st.subheader("🤖 Asistente de Estrategia IA")
-    if not df_contexto_display.empty:
-        with st.spinner("La IA está analizando la situación..."):
-            pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
-            posicion_para_ia = int(posicion_str.replace("#", "")) if '#' in posicion_str else posicion_str
-            sugerencia = obtener_sugerencia_ia(
-                producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio_display,
-                posicion=posicion_para_ia, nombre_lider=nombre_lider, precio_lider=precio_lider,
-                competidores_contexto=len(df_contexto_display), total_competidores=len(df_dia), pct_full=pct_full_contexto)
-            st.markdown(sugerencia)
-    else:
-        st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
-
-    st.markdown("---")
     
     # --- Gráfico de Tendencia ---
     st.subheader("Evolución de Precios (Últimos 15 días)")
@@ -338,6 +322,22 @@ if productos_disponibles:
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
 
+
+    # --- ANÁLISis CON IA ---
+    st.subheader("🤖 Asistente de Estrategia IA")
+    if not df_contexto_display.empty:
+        with st.spinner("La IA está analizando la situación..."):
+            pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
+            posicion_para_ia = int(posicion_str.replace("#", "")) if '#' in posicion_str else posicion_str
+            sugerencia = obtener_sugerencia_ia(
+                producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio_display,
+                posicion=posicion_para_ia, nombre_lider=nombre_lider, precio_lider=precio_lider,
+                competidores_contexto=len(df_contexto_display), total_competidores=len(df_dia), pct_full=pct_full_contexto)
+            st.markdown(sugerencia)
+    else:
+        st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
+
+    st.markdown("---")
 
     # --- TABLA DE DATOS DETALLADA ---
     with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
