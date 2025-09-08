@@ -121,7 +121,7 @@ TABLA_CRUDOS = config_cliente['tabla_crudos']
 NUESTRO_SELLER_NAME = config_cliente['seller_name']
 st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para explorar el mercado.")
 
-if not get_product_data(TABLA_CRUDOS).empty:
+if not TABLA_CRUDOS.empty:
     st.sidebar.header("Filtros Principales")
     productos_disponibles = get_product_list(TABLA_CRUDOS)
     producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
