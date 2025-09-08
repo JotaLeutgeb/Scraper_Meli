@@ -5,6 +5,11 @@
 .env
 cookies.json
 
+scraping/
+database/
+analysis/
+main.py
+
 # ###########################
 # ## Dependencias y Entornos Virtuales de Python
 # ## Ignoramos las librerías instaladas para que cada desarrollador
@@ -64,4 +69,4 @@ Thumbs.db
 # ## Buena práctica si alguien necesita sobreescribir configuraciones
 # ## sin afectar el archivo principal.
 # ###########################
-config.local.yml
+config.local.yml# ###########################
