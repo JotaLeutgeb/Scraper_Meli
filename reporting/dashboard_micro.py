@@ -191,7 +191,7 @@ def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, no
     """Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google."""
     try:
         genai.configure(api_key=st.secrets.google_ai["api_key"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         return f"Error al configurar la API de IA: {e}."
 
