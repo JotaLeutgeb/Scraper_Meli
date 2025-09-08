@@ -323,7 +323,7 @@ if productos_disponibles:
             if '(Líder)' in serie_name:
                 range_.append('#2ECC71') # Verde brillante si somos líderes
             elif 'Nuestra Pub' in serie_name:
-                range_.append('#00BFFF') # Azul para nuestras otras publicaciones
+                range_.append('#2ECC71') # Verde para nuestras publicaciones
             elif serie_name == 'Líder':
                 range_.append('#FF4B4B') # Rojo para el competidor líder
 
