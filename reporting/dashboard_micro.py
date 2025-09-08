@@ -13,6 +13,23 @@ import altair as alt
 import datetime
 
 # -----------------------------------------------------------------------------
+# FUNCION para deployment de varios dashboards
+
+def run_dashboard():
+    st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
+    st.title("Análisis Táctico con Asistente IA")
+
+    try:
+        config_cliente = st.secrets["client_config"]
+        TABLA_CRUDOS = config_cliente['tabla_crudos']
+        NUESTRO_SELLER_NAME = config_cliente['seller_name']
+    except Exception as e:
+        st.error(f"Error: No se encontró la 'client_config' en los secretos. Detalles: {e}")
+        st.stop()
+
+    st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**...")
+
+# -----------------------------------------------------------------------------
 # FUNCIONES DE CONEXIÓN Y CARGA DE DATOS
 
 @st.cache_resource
