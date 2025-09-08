@@ -276,62 +276,75 @@ if productos_disponibles:
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
     if not df_tendencia.empty:
-        # 1. Preparar un DataFrame con todas las publicaciones
-        df_plot_final = df_tendencia[['fecha_extraccion', 'precio', 'nombre_vendedor', 'link_publicacion']].copy()
+        # 1. Aislar nuestros datos y encontrar nuestro precio actual
+        df_nuestro = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
+        nuestro_precio_actual = 0
+        if not df_nuestro.empty:
+            fecha_mas_reciente_nuestra = df_nuestro['fecha_extraccion'].max()
+            nuestro_precio_actual = df_nuestro[df_nuestro['fecha_extraccion'] == fecha_mas_reciente_nuestra]['precio'].iloc[0]
 
-        # 2. Crear una columna 'tipo' para diferenciar nuestras publicaciones
-        df_plot_final['tipo'] = df_plot_final['nombre_vendedor'].apply(lambda x: 'Nuestra Empresa' if x == NUESTRO_SELLER_NAME else 'Competidor')
+        # 2. Identificar la fila completa del líder de cada día
+        df_lider_diario = df_tendencia.loc[df_tendencia.groupby('fecha_extraccion')['precio'].idxmin()].copy()
+        df_lider_diario['serie'] = 'Líder del Mercado'
 
-        # 3. Identificar el punto de precio más bajo de cada día
-        min_precios_diarios = df_plot_final.groupby('fecha_extraccion')['precio'].transform('min')
-        df_plot_final['es_lider'] = df_plot_final['precio'] == min_precios_diarios
+        # 3. Lógica para seleccionar solo competidores relevantes
+        df_hoy = df_tendencia[df_tendencia['fecha_extraccion'] == fecha_maxima].sort_values('precio').reset_index()
+        vendedores_relevantes = []
+        if nuestro_precio_actual > 0 and not df_hoy.empty:
+            lider_hoy = df_hoy.iloc[0]['nombre_vendedor']
+            if lider_hoy == NUESTRO_SELLER_NAME:
+                # Si somos líderes, el relevante es el segundo (si existe)
+                if len(df_hoy) > 1:
+                    vendedores_relevantes.append(df_hoy.iloc[1]['nombre_vendedor'])
+            else:
+                # Si no somos líderes, los relevantes son todos los que están más baratos que nosotros
+                vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
         
-        # 4. Crear un nombre amigable para la leyenda y el 'detail'
-        pubs_unicas = df_plot_final['link_publicacion'].unique()
-        nombres_amigables = {link: f"{df_plot_final[df_plot_final['link_publicacion'] == link].iloc[0]['nombre_vendedor']} ({link.split('/')[3]})" for link in pubs_unicas}
-        df_plot_final['publicacion_leyenda'] = df_plot_final['link_publicacion'].map(nombres_amigables)
+        # 4. Construir el DataFrame final para el gráfico
+        df_nuestro['serie'] = 'Nuestra Empresa'
+        df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
+        df_competidores['serie'] = df_competidores['nombre_vendedor'] # El nombre del competidor será la serie
 
-        # 5. Crear el gráfico base en Altair
-        base = alt.Chart(df_plot_final).encode(
-            x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
-            y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False))
-        )
-
-        # 6. Capa de LÍNEAS
-        lines = base.mark_line().encode(
-            color=alt.Color('tipo:N', 
-                scale=alt.Scale(domain=['Nuestra Empresa', 'Competidor'], range=['#2ECC71', '#3498DB']), 
-                legend=alt.Legend(title="Vendedor")
-            ),
-            detail='publicacion_leyenda:N'
-        )
-
-        # 7. CAMBIO CLAVE: Capa de PUNTOS (para asegurar visibilidad de datos únicos)
-        points = base.mark_point(size=50, filled=True).encode(
-            color=alt.Color('tipo:N', scale=alt.Scale(domain=['Nuestra Empresa', 'Competidor'], range=['#2ECC71', '#3498DB'])),
-            detail='publicacion_leyenda:N',
-            tooltip=[
-                alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
-                alt.Tooltip('nombre_vendedor:N', title='Vendedor'),
-                alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
-            ]
-        )
-
-        # 8. Capa de ESTRELLAS para el líder
-        stars = base.mark_point(shape='star', size=200, filled=True, color='#FFD700').encode(
-            tooltip=[
-                alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
-                alt.Tooltip('nombre_vendedor:N', title='Vendedor Líder'),
-                alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
-            ]
-        ).transform_filter(
-            alt.datum.es_lider == True
-        )
+        df_plot_final = pd.concat([df_nuestro, df_lider_diario, df_competidores]).drop_duplicates(
+            subset=['fecha_extraccion', 'precio', 'serie']
+        ).reset_index(drop=True)
         
-        # 9. Combinar las TRES capas y añadir interactividad
-        chart_final = (lines + points + stars).interactive().properties(height=350)
-        
-        st.altair_chart(chart_final, use_container_width=True)
+        # 5. Si no hay datos para graficar tras el filtro, mostrar un mensaje
+        if df_plot_final.empty:
+            st.info("No hay datos históricos suficientes para los competidores relevantes en este contexto.")
+        else:
+            # 6. Definir colores para las series principales
+            domain = ['Nuestra Empresa', 'Líder del Mercado'] + vendedores_relevantes
+            range_ = ['#2ECC71', '#FF4B4B'] + ['#3498DB', '#9B59B6', '#E67E22'] # Verde, Rojo y otros colores para competidores
+
+            # 7. Crear el gráfico con capas
+            base = alt.Chart(df_plot_final).encode(
+                x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
+                y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False))
+            )
+            
+            lines = base.mark_line().encode(
+                color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda")),
+                detail='serie:N' # Agrupa por serie para trazar líneas
+            )
+            
+            points = base.mark_point(size=60, filled=True).encode(
+                color=alt.Color('serie:N'),
+                tooltip=[
+                    alt.Tooltip('fecha_extraccion:T', format='%d/%m/%Y'),
+                    alt.Tooltip('serie:N', title='Vendedor'),
+                    alt.Tooltip('precio:Q', format='$,.2f')
+                ]
+            )
+
+            stars = alt.Chart(df_lider_diario).mark_point(shape='star', size=200, filled=True, color='#FFD700').encode(
+                x='fecha_extraccion:T',
+                y='precio:Q',
+                tooltip=[alt.Tooltip('nombre_vendedor:N', title='Líder del día')]
+            )
+
+            chart_final = (lines + points + stars).interactive().properties(height=350)
+            st.altair_chart(chart_final, use_container_width=True)
 
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
