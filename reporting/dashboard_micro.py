@@ -47,42 +47,42 @@ def load_data(tabla_crudos: str):
 @st.cache_data
 def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, precio_lider, competidores_contexto, total_competidores, pct_full):
     """
-    Genera un análisis competitivo y sugerencias utilizando la IA Generativa de Google.
-    La respuesta se cachea para evitar llamadas repetidas a la API con los mismos datos.
+    Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google.
     """
     try:
         genai.configure(api_key=st.secrets.google_ai["api_key"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
-        return f"Error al configurar la API de IA Generativa: {e}. Asegúrate de que la clave de API esté en los secretos de Streamlit."
+        return f"Error al configurar la API de IA: {e}."
 
-    # Si no estamos en el mercado, el análisis es diferente
+    # --- INICIO DE LA MODIFICACIÓN DEL PROMPT ---
     if posicion == "N/A" or posicion == "Fuera de Filtro":
         prompt = f"""
-        Actúa como un analista experto en e-commerce para Mercado Libre.
-        Analiza la siguiente situación para el producto "{producto}":
-        - Nuestra empresa "{nuestro_seller}" NO está compitiendo en el segmento de mercado actual (definido por los filtros aplicados).
-        - El precio del líder en este segmento es de ${precio_lider:,.2f}.
-        - Hay {competidores_contexto} competidores en este segmento filtrado, de un total de {total_competidores} competidores para el producto hoy.
-        - El {pct_full:.0f}% de los competidores en este segmento ofrece envío FULL.
-
-        Basado en esto, proporciona un análisis conciso y 1 o 2 recomendaciones estratégicas. ¿Deberíamos entrar en este segmento? ¿A qué precio? ¿Qué factores clave debemos considerar?
-        Usa un tono profesional y directo. Formatea tu respuesta usando Markdown.
+        **Rol:** Eres un asesor de estrategia e-commerce para Mercado Libre, experto en dar insights rápidos y accionables.
+        **Tarea:** Analiza por qué nuestra empresa, "{nuestro_seller}", no compite en este segmento específico del producto "{producto}" y da recomendaciones.
+        **Datos Clave:**
+        - Precio del líder: ${precio_lider:,.2f}.
+        - Competidores en este segmento: {competidores_contexto} de {total_competidores}.
+        - % de competidores con FULL: {pct_full:.0f}%.
+        **Formato de Respuesta Obligatorio:**
+        1.  **Diagnóstico (máximo 2 frases):** Un análisis breve de la situación.
+        2.  **Recomendaciones (máximo 2 bullet points):** Dos acciones directas y concisas.
+        **Restricciones:** Sé extremadamente breve. Sin introducciones, saludos ni conclusiones. Ve directo al punto.
         """
     else: # Estamos compitiendo
         prompt = f"""
-        Actúa como un analista experto en e-commerce para Mercado Libre.
-        Analiza la siguiente situación competitiva para el producto "{producto}":
-        - Nuestra empresa: "{nuestro_seller}".
-        - Nuestro precio: ${nuestro_precio:,.2f}.
-        - Nuestra posición en el ranking de precios (en el contexto filtrado): #{posicion}.
-        - Precio del competidor líder: ${precio_lider:,.2f}.
-        - Número de competidores en este contexto: {competidores_contexto} (de un total de {total_competidores} hoy).
-        - Porcentaje de competidores en este contexto con envío FULL: {pct_full:.0f}%.
-
-        Basado en estos datos, proporciona un análisis de nuestra situación y 1 o 2 recomendaciones estratégicas claras y accionables.
-        Considera la diferencia de precio y nuestra posición. ¿Deberíamos ajustar el precio? ¿Mejorar servicios? ¿Mantener la estrategia?
-        Usa un tono profesional y directo. Formatea tu respuesta usando Markdown (usa asteriscos para negritas).
+        **Rol:** Eres un asesor de estrategia e-commerce para Mercado Libre, experto en dar insights rápidos y accionables.
+        **Tarea:** Analiza nuestra posición para el producto "{producto}" y da recomendaciones.
+        **Datos Clave de Nuestra Empresa ({nuestro_seller}):**
+        - Nuestro Precio: ${nuestro_precio:,.2f}.
+        - Nuestra Posición: #{posicion}.
+        - Precio del Líder: ${precio_lider:,.2f}.
+        - Competidores en este contexto: {competidores_contexto} de {total_competidores}.
+        - % de competidores con FULL: {pct_full:.0f}%.
+        **Formato de Respuesta Obligatorio:**
+        1.  **Diagnóstico (máximo 3 frases):** Un análisis breve de nuestra posición actual.
+        2.  **Recomendaciones (máximo 2 bullet points):** Dos acciones claras, directas y concisas.
+        **Restricciones:** Sé extremadamente breve. Sin introducciones, saludos ni conclusiones. Ve directo al punto. Usa Markdown para negritas (*palabra*).
         """
     try:
         response = model.generate_content(prompt)
