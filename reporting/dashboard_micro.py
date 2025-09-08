@@ -54,17 +54,23 @@ def get_product_data(tabla_crudos: str, producto: str):
     if df.empty:
         return pd.DataFrame()
 
-    # --- LÓGICA DE AGREGACIÓN DIARIA ---
+    # --- LÓGICA DE AGREGACIÓN DIARIA (CORREGIDA) ---
     df['fecha_dia'] = pd.to_datetime(df['fecha_extraccion']).dt.date
     
+    # Definimos las claves de agrupación.
+    grouping_keys = ['fecha_dia', 'link_publicacion']
+    # Seleccionamos las columnas a agregar, EXCLUYENDO las claves.
+    agg_cols = [col for col in df.columns if col not in grouping_keys]
+    
     # Agrupamos por día y publicación, y nos quedamos con el ÚLTIMO registro del día.
-    columnas_originales = [col for col in df.columns if col != 'fecha_dia']
-    df_agregado = df.groupby(['fecha_dia', 'link_publicacion'])[columnas_originales].last().reset_index()
+    # Esta separación evita el conflicto de nombres en reset_index.
+    df_agregado = df.groupby(grouping_keys)[agg_cols].last().reset_index()
 
     # Renombramos la columna de fecha para que coincida con el resto del script.
     df_final = df_agregado.rename(columns={'fecha_dia': 'fecha_extraccion'})
     
     return df_final
+
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
