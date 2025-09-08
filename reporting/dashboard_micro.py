@@ -1,5 +1,5 @@
-# dashboard_micro.py (Versión 7.0 - Dashboard Táctico Interactivo y Dinámico)
-# Autor: PROYECTO MELI
+# dashboard_micro.py
+# Autor: Joaquin Leutgeb.
 # Descripción: Una herramienta de análisis táctico que permite a los usuarios
 # visualizar su posición en el mercado, recibir insights de una IA estratégica
 # y simular escenarios de precios en tiempo real para ver su impacto inmediato.
@@ -45,11 +45,143 @@ def get_product_list(tabla_crudos: str):
 def get_product_data(tabla_crudos: str, producto: str):
     """Carga los datos de los últimos 30 días SOLO para el producto seleccionado."""
     engine = get_engine()
-    # Parámetros para prevenir inyección SQL, aunque la data sea mía y todo eso, es una buena práctica
     query = f"SELECT * FROM {tabla_crudos} WHERE nombre_producto = %(producto)s AND fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion DESC"
     df = pd.read_sql(query, engine, params={'producto': producto})
     df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
     return df
+
+# -----------------------------------------------------------------------------
+# FUNCIÓN DE ANÁLISIS Y LÓGICA DE NEGOCIO
+
+def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio: float):
+    """
+    Calcula los KPIs clave de forma segura, manejando casos borde donde
+    nuestra empresa o competidores son excluidos por los filtros.
+    """
+    kpis = {
+        "posicion_num": "N/A",
+        "posicion_str": "N/A",
+        "cant_total": len(df_contexto),
+        "nombre_lider": "N/A",
+        "precio_lider": 0,
+        "link_lider": "#"
+    }
+
+    # Si no hay datos en el contexto, determinar si es porque no competimos o por los filtros.
+    if df_contexto.empty:
+        kpis["posicion_str"] = "Fuera de Filtro" if nuestro_precio > 0 else "N/A"
+        return kpis
+
+    # Extraer información del líder del mercado de forma segura.
+    kpis["nombre_lider"] = df_contexto.iloc[0]['nombre_vendedor']
+    kpis["precio_lider"] = df_contexto.iloc[0]['precio']
+    kpis["link_lider"] = df_contexto.iloc[0].get('link_publicacion', '#')
+
+    # Buscar nuestra posición en el contexto actual.
+    nuestra_pos_info = df_contexto[df_contexto['nombre_vendedor'] == nuestro_seller]
+
+    if not nuestra_pos_info.empty:
+        # Si nos encontramos, calcular la posición numérica.
+        kpis["posicion_num"] = nuestra_pos_info.index[0] + 1
+        kpis["posicion_str"] = f"#{kpis['posicion_num']}"
+    elif nuestro_precio > 0:
+        # Si no nos encontramos pero tenemos un precio, es que fuimos filtrados.
+        kpis["posicion_str"] = "Fuera de Filtro"
+
+    return kpis
+
+def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
+    """
+    Prepara el DataFrame para el gráfico de tendencias.
+
+    Esta función aísla la lógica de negocio para identificar las series de
+    datos más relevantes para el análisis histórico:
+    1. La serie de precios de nuestra empresa.
+    2. La serie de precios del líder de cada día.
+    3. Las series de precios de competidores que hoy son más baratos que nosotros.
+
+    Además, genera una paleta de colores dinámica que siempre asigna un color
+    consistente (verde) a nuestra empresa.
+
+    Args:
+        df_hist (pd.DataFrame): DataFrame con los datos históricos de los últimos
+                                15 días para un producto específico.
+        nuestro_seller (str): El nombre de nuestra empresa/vendedor.
+
+    Returns:
+        tuple[pd.DataFrame, list[str] | None]:
+            - Un DataFrame pivotado listo para ser usado en st.line_chart.
+            - Una lista de colores correspondiente a las columnas del DataFrame,
+              o None si no hay datos para graficar.
+    """
+    # --- 1. LÓGICA DE NEGOCIO PARA FILTRAR SERIES RELEVANTES ---
+    
+    # Identificar nuestra propia serie de datos y nuestro precio más reciente
+    df_nuestro = df_hist[df_hist['nombre_vendedor'] == nuestro_seller].copy()
+    nuestro_precio_actual = 0
+    if not df_nuestro.empty:
+        fecha_mas_reciente_nuestra = df_nuestro['fecha_extraccion'].max()
+        nuestro_precio_actual = df_nuestro[df_nuestro['fecha_extraccion'] == fecha_mas_reciente_nuestra]['precio'].iloc[0]
+
+    # Identificar al líder de cada día en el período histórico
+    df_lider_diario = df_hist.loc[df_hist.groupby('fecha_extraccion')['precio'].idxmin()].copy()
+    
+    # Identificar competidores relevantes (aquellos con precio inferior al nuestro en el día más reciente)
+    fecha_maxima = df_hist['fecha_extraccion'].max()
+    df_hoy = df_hist[df_hist['fecha_extraccion'] == fecha_maxima].sort_values('precio').reset_index()
+    
+    vendedores_relevantes = []
+    if nuestro_precio_actual > 0 and not df_hoy.empty:
+        lider_hoy = df_hoy.iloc[0]['nombre_vendedor']
+        if lider_hoy == nuestro_seller:
+            # Si somos el líder, el competidor relevante es el que nos sigue
+            if len(df_hoy) > 1:
+                vendedores_relevantes.append(df_hoy.iloc[1]['nombre_vendedor'])
+        else:
+            # Si no somos el líder, los relevantes son todos los que están por debajo de nuestro precio
+            vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
+    
+    # --- 2. PREPARACIÓN DEL DATAFRAME PARA GRAFICAR ---
+    
+    # Asignar una columna 'serie' para la pivotación, que será el nombre en la leyenda
+    df_nuestro['serie'] = f"{nuestro_seller}"
+    df_lider_diario['serie'] = df_lider_diario['nombre_vendedor']
+    df_competidores = df_hist[df_hist['nombre_vendedor'].isin(vendedores_relevantes)].copy()
+    df_competidores['serie'] = df_competidores['nombre_vendedor']
+
+    # Concatenar todas las series relevantes y eliminar duplicados (ej. si el líder es también un competidor relevante)
+    df_largo = pd.concat([df_nuestro, df_lider_diario, df_competidores]).drop_duplicates(
+        subset=['fecha_extraccion', 'precio', 'serie']).reset_index(drop=True)
+
+    if df_largo.empty:
+        return pd.DataFrame(), None
+
+    # Pivotar la tabla para tener fechas como índice y series como columnas
+    df_para_grafico = df_largo.pivot_table(
+        index='fecha_extraccion',
+        columns='serie',
+        values='precio'
+    )
+
+    # --- 3. LÓGICA DE COLORES DINÁMICA Y ROBUSTA ---
+    colores = None
+    cols = df_para_grafico.columns.tolist()
+
+    if f"{nuestro_seller}" in cols:
+        # Reordenar para que nuestra empresa esté siempre primera en la leyenda
+        cols.insert(0, cols.pop(cols.index(f"{nuestro_seller}")))
+        df_para_grafico = df_para_grafico[cols]
+
+        # Generar la lista de colores dinámicamente
+        paleta_competidores = ['#FF4B4B', '#3498DB', '#9B59B6', '#E67E22', '#F1C40F']
+        colores = ['#2ECC71'] # El primer color es siempre verde para nosotros
+
+        # Añadir colores para el resto de las columnas, ciclando la paleta
+        num_competidores = len(cols) - 1
+        for i in range(num_competidores):
+            colores.append(paleta_competidores[i % len(paleta_competidores)])
+
+    return df_para_grafico, colores
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
@@ -59,7 +191,7 @@ def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, no
     """Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google."""
     try:
         genai.configure(api_key=st.secrets.google_ai["api_key"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
         return f"Error al configurar la API de IA: {e}."
 
@@ -178,38 +310,24 @@ if productos_disponibles:
         df_contexto_display = df_simulacion.sort_values(by='precio').reset_index(drop=True)
         nuestro_precio_display = nuevo_precio_simulado
 
-    # A partir de acá, todo el dashboard usa las variables "_display" ya que pueden ser reales o simuladas
     if modo_simulacion:
         st.warning("**MODO SIMULACIÓN ACTIVADO** - Los datos mostrados reflejan el precio simulado.", icon="🧪")
 
+    # --- **NUEVO** Cálculo centralizado y robusto de KPIs ---
+    kpis = calcular_kpis(df_contexto_display, NUESTRO_SELLER_NAME, nuestro_precio_display)
+
     # --- Visualización de Título y Métricas ---
-    if not df_contexto_display.empty:
-        nombre_lider = df_contexto_display.iloc[0]['nombre_vendedor']
-        precio_lider = df_contexto_display.iloc[0]['precio']
-        link_lider = df_contexto_display.iloc[0].get('link_publicacion', '#')
-        st.header(f"[{producto_seleccionado}]({link_lider})")
-    else:
-        nombre_lider, precio_lider = "N/A", 0
-        st.header(f"Análisis para: {producto_seleccionado}")
-    
+    st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
     st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
     st.markdown("---")
 
     col1, col2, col3, col4 = st.columns(4)
-    posicion_str = "N/A"
-    if nuestro_precio_display > 0 and not df_contexto_display.empty and NUESTRO_SELLER_NAME in df_contexto_display['nombre_vendedor'].values:
-        posicion_num = df_contexto_display.index[df_contexto_display['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
-        posicion_str = f"#{posicion_num}"
-        cant_total = len(df_contexto_display)
-    elif nuestro_precio_display > 0:
-        posicion_str = "Fuera de Filtro"
-
-    with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=f"{posicion_str} de {cant_total}")
+    with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=f"{kpis['posicion_num']} de {kpis['cant_total']}" if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'])
     with col2: st.metric(label="💲 Nuestro Precio", value=f"${nuestro_precio_display:,.2f}" if nuestro_precio_display > 0 else "N/A")
-    with col3: st.metric(label="🥇 Precio Líder (contexto)", value=f"${precio_lider:,.2f}" if precio_lider > 0 else "N/A")
+    with col3: st.metric(label="🥇 Precio Líder (contexto)", value=f"${kpis['precio_lider']:,.2f}" if kpis['precio_lider'] > 0 else "N/A")
     with col4:
-        if nuestro_precio_display > 0 and precio_lider > 0:
-            dif_vs_lider = nuestro_precio_display - precio_lider
+        if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
+            dif_vs_lider = nuestro_precio_display - kpis['precio_lider']
             delta_text = f"${(nuestro_precio_display - nuestro_precio_real):,.2f} vs. real" if modo_simulacion else None
             st.metric(label="💰 Diferencia vs. Líder", value=f"${dif_vs_lider:,.2f}", delta=delta_text, delta_color="off")
         else:
@@ -224,22 +342,24 @@ if productos_disponibles:
         
         df_plot['tipo'] = 'Competidor'
         df_plot['orden_render'] = 1
-        lider_vendedor_nombre = df_plot.iloc[0]['nombre_vendedor']
+        
+        # Usa el nombre del líder desde los KPIs ya calculados
+        lider_vendedor_nombre = kpis['nombre_lider']
+        
         if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
             nuestra_empresa_mask = df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME
             df_plot.loc[nuestra_empresa_mask, 'tipo'] = 'Nuestra Empresa'
             df_plot.loc[nuestra_empresa_mask, 'orden_render'] = 3
+        
         if lider_vendedor_nombre != NUESTRO_SELLER_NAME:
             lider_mask = df_plot['nombre_vendedor'] == lider_vendedor_nombre
             df_plot.loc[lider_mask, 'tipo'] = 'Líder'
             df_plot.loc[lider_mask, 'orden_render'] = 2
         
-        # Ajuste dinámico del eje X para mejor visualización
         min_precio = df_plot['precio'].min()
         max_precio = df_plot['precio'].max()
         padding = (max_precio - min_precio) * 0.05
         if padding == 0: padding = min_precio * 0.05
-
         dominio_min = min_precio - padding
         dominio_max = max_precio + padding
 
@@ -261,79 +381,30 @@ if productos_disponibles:
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
     if not df_tendencia.empty:
-        # --- LÓGICA DE NEGOCIO PARA FILTRAR SERIES ---
-        df_nuestro = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
-        nuestro_precio_actual = 0
-        if not df_nuestro.empty:
-            fecha_mas_reciente_nuestra = df_nuestro['fecha_extraccion'].max()
-            nuestro_precio_actual = df_nuestro[df_nuestro['fecha_extraccion'] == fecha_mas_reciente_nuestra]['precio'].iloc[0]
-
-        df_lider_diario = df_tendencia.loc[df_tendencia.groupby('fecha_extraccion')['precio'].idxmin()].copy()
+        # Llamada a la nueva función encapsulada
+        df_grafico_tendencia, colores_tendencia = preparar_datos_tendencia(df_tendencia, NUESTRO_SELLER_NAME)
         
-        df_hoy = df_tendencia[df_tendencia['fecha_extraccion'] == fecha_maxima].sort_values('precio').reset_index()
-        vendedores_relevantes = []
-        if nuestro_precio_actual > 0 and not df_hoy.empty:
-            lider_hoy = df_hoy.iloc[0]['nombre_vendedor']
-            if lider_hoy == NUESTRO_SELLER_NAME:
-                if len(df_hoy) > 1:
-                    vendedores_relevantes.append(df_hoy.iloc[1]['nombre_vendedor'])
-            else:
-                vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
-        
-        # --- PREPARACIÓN DEL DATAFRAME ---
-        df_nuestro['serie'] = f"{NUESTRO_SELLER_NAME}"
-        df_lider_diario['serie'] = df_lider_diario['nombre_vendedor']
-        df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
-        df_competidores['serie'] = df_competidores['nombre_vendedor']
-
-        df_largo = pd.concat([df_nuestro, df_lider_diario, df_competidores]).drop_duplicates(
-            subset=['fecha_extraccion', 'precio', 'serie']
-        ).reset_index(drop=True)
-
-        if not df_largo.empty:
-            df_para_grafico = df_largo.pivot_table(
-                index='fecha_extraccion',
-                columns='serie',
-                values='precio'
-            )
-
-            # --- LÓGICA DE COLORES DINÁMICA Y ROBUSTA ---
-            colores = None
-            cols = df_para_grafico.columns.tolist()
-
-            if f"{NUESTRO_SELLER_NAME}" in cols:
-                # 1. Reordenar para que nuestra empresa esté siempre primera
-                cols.insert(0, cols.pop(cols.index(f"{NUESTRO_SELLER_NAME}")))
-                df_para_grafico = df_para_grafico[cols]
-
-                # 2. Generar la lista de colores dinámicamente
-                paleta_competidores = ['#FF4B4B', '#3498DB', '#9B59B6', '#E67E22', '#F1C40F']
-                colores = ['#2ECC71'] # El primer color es siempre verde para nosotros
-
-                # 3. Añadir colores para el resto de las columnas, ciclando la paleta
-                num_competidores = len(cols) - 1
-                for i in range(num_competidores):
-                    colores.append(paleta_competidores[i % len(paleta_competidores)])
-
-            # --- GRAFICAR ---
+        if df_grafico_tendencia is not None and not df_grafico_tendencia.empty:
             st.info("Mostrando su empresa, el líder del día y los competidores con precio inferior al suyo.")
-            st.line_chart(df_para_grafico, color=colores)
+            st.line_chart(df_grafico_tendencia, color=colores_tendencia)
         else:
             st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
 
 
-    # --- ANÁLISis CON IA ---
+    # --- ANÁLISIS CON IA ---
     st.subheader("🤖 Asistente de Estrategia IA")
     if not df_contexto_display.empty:
         with st.spinner("La IA está analizando la situación..."):
             pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
-            posicion_para_ia = int(posicion_str.replace("#", "")) if '#' in posicion_str else posicion_str
+            # Usar la posición numérica para la IA si está disponible, si no, el string 'Fuera de Filtro' o 'N/A'
+            posicion_para_ia = kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str']
+            
             sugerencia = obtener_sugerencia_ia(
                 producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio_display,
-                posicion=posicion_para_ia, nombre_lider=nombre_lider, precio_lider=precio_lider,
-                competidores_contexto=len(df_contexto_display), total_competidores=len(df_dia), pct_full=pct_full_contexto)
+                posicion=posicion_para_ia, nombre_lider=kpis['nombre_lider'], precio_lider=kpis['precio_lider'],
+                competidores_contexto=kpis['cant_total'], total_competidores=len(df_dia), pct_full=pct_full_contexto)
             st.markdown(sugerencia)
     else:
         st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
@@ -350,7 +421,6 @@ if productos_disponibles:
                 use_container_width=True, hide_index=True)
         else:
             st.write("Tabla vacía para el contexto actual.")
-
 
 else:
     # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
