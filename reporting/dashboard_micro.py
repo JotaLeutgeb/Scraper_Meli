@@ -121,9 +121,10 @@ TABLA_CRUDOS = config_cliente['tabla_crudos']
 NUESTRO_SELLER_NAME = config_cliente['seller_name']
 st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para explorar el mercado.")
 
-if not TABLA_CRUDOS.empty:
+productos_disponibles = get_product_list(TABLA_CRUDOS)
+
+if not productos_disponibles.empty:
     st.sidebar.header("Filtros Principales")
-    productos_disponibles = get_product_list(TABLA_CRUDOS)
     producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
     df_producto = get_product_data(TABLA_CRUDOS, producto_seleccionado)
     fecha_maxima = df_producto['fecha_extraccion'].max()
@@ -147,40 +148,45 @@ if not TABLA_CRUDOS.empty:
     st.sidebar.header("🧪 Simulador de Escenarios")
     nuestro_precio = nuestra_oferta['precio'].iloc[0] if not nuestra_oferta.empty else 0
     nuevo_precio_simulado = st.sidebar.number_input("Probar un nuevo precio para mi producto", value=None, placeholder=f"Actual: ${nuestro_precio:,.2f}")
+else:
+    # Si no hay productos, mostramos la advertencia
+    st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
+    st.info(f"Verifique que el pipeline para el cliente '{empresa_seleccionada}' se haya ejecutado correctamente.")
 
-    if nuevo_precio_simulado:
-        # Copiamos el dataframe para no alterar el original
-        df_simulacion = df_contexto_sorted.copy()
 
-        # Actualizamos nuestro precio si existimos en el contexto
-        if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
-            df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
-        else:
-            # Si no estábamos, nos añadimos para la simulación
-            nuestra_fila = nuestra_oferta.copy()
-            nuestra_fila['precio'] = nuevo_precio_simulado
-            df_simulacion = pd.concat([df_simulacion, nuestra_fila], ignore_index=True)
+if nuevo_precio_simulado:
+    # Copiamos el dataframe para no alterar el original
+    df_simulacion = df_contexto_sorted.copy()
 
-        # Re-ordenamos por el nuevo precio
-        df_simulacion = df_simulacion.sort_values(by='precio').reset_index(drop=True)
+    # Actualizamos nuestro precio si existimos en el contexto
+    if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
+        df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
+    else:
+        # Si no estábamos, nos añadimos para la simulación
+        nuestra_fila = nuestra_oferta.copy()
+        nuestra_fila['precio'] = nuevo_precio_simulado
+        df_simulacion = pd.concat([df_simulacion, nuestra_fila], ignore_index=True)
 
-        # Encontramos la nueva posición
-        nueva_posicion_num = df_simulacion.index[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
+    # Re-ordenamos por el nuevo precio
+    df_simulacion = df_simulacion.sort_values(by='precio').reset_index(drop=True)
 
-        st.info(f"**Resultado de la simulación:** Con un precio de `${nuevo_precio_simulado:,.2f}`, tu nueva posición sería **#{nueva_posicion_num}** en este contexto.")
+    # Encontramos la nueva posición
+    nueva_posicion_num = df_simulacion.index[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
 
-        columnas_simulacion = [
-        'nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full',
-        'envio_gratis', 'factura_a', 'reputacion_vendedor']
+    st.info(f"**Resultado de la simulación:** Con un precio de `${nuevo_precio_simulado:,.2f}`, tu nueva posición sería **#{nueva_posicion_num}** en este contexto.")
 
-        # Asegurarnos que todas las columnas existan en el df_simulacion
-        columnas_existentes = [col for col in columnas_simulacion if col in df_simulacion.columns]
+    columnas_simulacion = [
+    'nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full',
+    'envio_gratis', 'factura_a', 'reputacion_vendedor']
 
-        # Opcional: mostrar la tabla simulada
-        with st.expander("Ver tabla de competidores con el precio simulado"):
-            st.dataframe(
-            df_simulacion[columnas_existentes].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
-            use_container_width=True,hide_index=True)
+    # Asegurarnos que todas las columnas existan en el df_simulacion
+    columnas_existentes = [col for col in columnas_simulacion if col in df_simulacion.columns]
+
+    # Opcional: mostrar la tabla simulada
+    with st.expander("Ver tabla de competidores con el precio simulado"):
+        st.dataframe(
+        df_simulacion[columnas_existentes].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+        use_container_width=True,hide_index=True)
 
 
 
