@@ -276,19 +276,15 @@ if productos_disponibles:
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
     if not df_tendencia.empty:
-        # --- LÓGICA DE NEGOCIO PARA FILTRAR SERIES (SE MANTIENE) ---
-
-        # 1. Aislar nuestros datos y encontrar nuestro precio actual
+        # --- LÓGICA DE NEGOCIO PARA FILTRAR SERIES ---
         df_nuestro = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
         nuestro_precio_actual = 0
         if not df_nuestro.empty:
             fecha_mas_reciente_nuestra = df_nuestro['fecha_extraccion'].max()
             nuestro_precio_actual = df_nuestro[df_nuestro['fecha_extraccion'] == fecha_mas_reciente_nuestra]['precio'].iloc[0]
 
-        # 2. Identificar al líder de cada día
         df_lider_diario = df_tendencia.loc[df_tendencia.groupby('fecha_extraccion')['precio'].idxmin()].copy()
         
-        # 3. Seleccionar solo competidores relevantes
         df_hoy = df_tendencia[df_tendencia['fecha_extraccion'] == fecha_maxima].sort_values('precio').reset_index()
         vendedores_relevantes = []
         if nuestro_precio_actual > 0 and not df_hoy.empty:
@@ -299,21 +295,16 @@ if productos_disponibles:
             else:
                 vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
         
-        # --- PREPARACIÓN DEL DATAFRAME PARA st.line_chart ---
-
-        # 4. Asignar un nombre de serie a cada grupo de datos
+        # --- PREPARACIÓN DEL DATAFRAME ---
         df_nuestro['serie'] = 'Nuestra Empresa'
         df_lider_diario['serie'] = df_lider_diario['nombre_vendedor']
         df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
         df_competidores['serie'] = df_competidores['nombre_vendedor']
 
-        # 5. Combinar todos los datos relevantes en un solo DataFrame "largo"
         df_largo = pd.concat([df_nuestro, df_lider_diario, df_competidores]).drop_duplicates(
             subset=['fecha_extraccion', 'precio', 'serie']
         ).reset_index(drop=True)
 
-        # 6. CAMBIO CLAVE: Pivotear la tabla a formato "ancho"
-        # st.line_chart necesita que cada línea sea una columna.
         if not df_largo.empty:
             df_para_grafico = df_largo.pivot_table(
                 index='fecha_extraccion',
@@ -321,17 +312,27 @@ if productos_disponibles:
                 values='precio'
             )
 
-            # 7. GRAFICAR CON st.line_chart (Simple y directo)
+            # --- LÓGICA DE COLORES DINÁMICA Y ROBUSTA ---
+            colores = None
             cols = df_para_grafico.columns.tolist()
+
             if 'Nuestra Empresa' in cols:
+                # 1. Reordenar para que nuestra empresa esté siempre primera
                 cols.insert(0, cols.pop(cols.index('Nuestra Empresa')))
                 df_para_grafico = df_para_grafico[cols]
-                # Definir la lista de colores con el verde al principio
-                colores = ['#2ECC71'] + ['#FF4B4B', '#3498DB', '#9B59B6', '#E67E22']
-            
+
+                # 2. Generar la lista de colores dinámicamente
+                paleta_competidores = ['#FF4B4B', '#3498DB', '#9B59B6', '#E67E22', '#F1C40F']
+                colores = ['#2ECC71'] # El primer color es siempre verde para nosotros
+
+                # 3. Añadir colores para el resto de las columnas, ciclando la paleta
+                num_competidores = len(cols) - 1
+                for i in range(num_competidores):
+                    colores.append(paleta_competidores[i % len(paleta_competidores)])
+
+            # --- GRAFICAR ---
             st.info("Mostrando su empresa, el líder del día y los competidores con precio inferior al suyo.")
             st.line_chart(df_para_grafico, color=colores)
-            
         else:
             st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
     else:
