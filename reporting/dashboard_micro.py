@@ -274,13 +274,54 @@ if productos_disponibles:
     # --- Gráfico de Tendencia ---
     st.subheader("Evolución de Precios (Últimos 15 días)")
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
+
     if not df_tendencia.empty:
+    # 1. Obtenemos el precio del líder por día (sin cambios)
         df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index().rename(columns={'precio': 'precio_lider'})
-        df_nuestro_diario = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME][['fecha_extraccion', 'precio']].rename(columns={'precio': 'nuestro_precio'})
-        df_plot_tendencia = pd.merge(df_lider_diario, df_nuestro_diario, on='fecha_extraccion', how='left')
-        # Rellenar días sin datos nuestros con el último precio conocido
-        df_plot_tendencia['nuestro_precio'] = df_plot_tendencia['nuestro_precio'].fillna(method='ffill')
-        st.line_chart(df_plot_tendencia, x='fecha_extraccion', y=['precio_lider', 'nuestro_precio'])
+
+        # 2. Aislamos TODAS nuestras publicaciones
+        df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
+
+        if not df_nuestras_publicaciones.empty:
+            # 3. Pivotamos nuestras publicaciones para crear una columna por cada 'link_publicacion' único.
+            #    Esto transforma las filas en columnas.
+            df_pivot_nuestro = df_nuestras_publicaciones.pivot_table(
+                index='fecha_extraccion',
+                columns='link_publicacion', # Crea una columna para cada publicación
+                values='precio'
+            )
+
+            # 4. Creamos nombres más amigables para las columnas (en lugar de URLs largas)
+            #    Ej: https://articulo.mercadolibre.com.ar/MLA-123 -> Nuestra Pub. 1 (MLA-123)
+            nuevos_nombres = {}
+            for i, col in enumerate(df_pivot_nuestro.columns):
+                pub_id = col.split('/')[3].replace('-', ' ') # Extrae el ID tipo "MLA 123"
+                nuevos_nombres[col] = f'Nuestra Pub. {i+1} ({pub_id})'
+            df_pivot_nuestro = df_pivot_nuestro.rename(columns=nuevos_nombres)
+
+            # 5. Unimos los datos del líder con nuestras columnas pivotadas
+            df_plot_tendencia = pd.merge(df_lider_diario, df_pivot_nuestro, on='fecha_extraccion', how='left')
+
+            # 6. Rellenamos los datos faltantes para todas nuestras columnas
+            columnas_nuestras = df_pivot_nuestro.columns
+            for col in columnas_nuestras:
+                df_plot_tendencia[col] = df_plot_tendencia[col].fillna(method='ffill')
+
+            # 7. Preparamos los parámetros para el gráfico final
+            columnas_y = ['precio_lider'] + list(columnas_nuestras)
+            colores = ['#FF4B4B'] + ['#2ECC71', '#00BFFF', '#9B59B6', '#F1C40F'][:len(columnas_nuestras)] # Rojo para líder, y varios colores para nosotros
+
+            # 8. Graficamos
+            st.line_chart(
+                df_plot_tendencia,
+                x='fecha_extraccion',
+                y=columnas_y,
+                color=colores
+            )
+        else:
+            # Si no tenemos publicaciones, mostramos solo al líder
+            st.line_chart(df_lider_diario, x='fecha_extraccion', y='precio_lider', color=['#FF4B4B'])
+
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
 
