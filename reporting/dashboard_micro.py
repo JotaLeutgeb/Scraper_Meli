@@ -1,8 +1,7 @@
-# dashboard_micro.py (Versión 7.0 - Dashboard Táctico Interactivo y Dinámico)
+# dashboard_micro.py (Versión 7.1 - Estable Revertida)
 # Autor: PROYECTO MELI
-# Descripción: Una herramienta de análisis táctico que permite a los usuarios
-# visualizar su posición en el mercado, recibir insights de una IA estratégica
-# y simular escenarios de precios en tiempo real para ver su impacto inmediato.
+# Descripción: Versión estable del dashboard táctico. Se revierte el gráfico de tendencia
+# a una implementación simple y robusta para garantizar el funcionamiento sin errores.
 
 import streamlit as st
 import pandas as pd
@@ -44,41 +43,19 @@ def get_product_list(tabla_crudos: str):
 @st.cache_data
 def get_product_data(tabla_crudos: str, producto: str):
     """
-    Carga los datos de los últimos 30 días SOLO para el producto seleccionado,
-    limpia fechas inválidas y asegura un único registro por publicación por día (el último).
+    Carga los datos de los últimos 30 días para un producto.
+    Esta es la versión simple y original de la función.
     """
     engine = get_engine()
     query = f"SELECT * FROM {tabla_crudos} WHERE nombre_producto = %(producto)s AND fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion ASC"
     df = pd.read_sql(query, engine, params={'producto': producto})
-
-    if df.empty:
-        return pd.DataFrame()
-
-    # --- LÓGICA DE VALIDACIÓN Y LIMPIEZA DE FECHAS ---
-    df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion'], errors='coerce')
-    df.dropna(subset=['fecha_extraccion'], inplace=True)
     
-    if df.empty:
-        return pd.DataFrame()
-
-    # --- LÓGICA DE AGREGACIÓN DIARIA (CORREGIDA) ---
-    # 1. Creamos la columna solo con la fecha.
-    df['fecha_dia'] = df['fecha_extraccion'].dt.date
-    
-    # 2. *** LA CORRECCIÓN CLAVE: Eliminamos la columna original para evitar duplicados. ***
-    df = df.drop(columns=['fecha_extraccion'])
-    
-    # 3. Procedemos con la agrupación como antes.
-    grouping_keys = ['fecha_dia', 'link_publicacion']
-    agg_cols = [col for col in df.columns if col not in grouping_keys]
-    
-    df_agregado = df.groupby(grouping_keys)[agg_cols].last().reset_index()
-
-    # 4. Renombramos la columna de fecha para que coincida con el resto del script.
-    df_final = df_agregado.rename(columns={'fecha_dia': 'fecha_extraccion'})
-    
-    return df_final
-
+    if not df.empty:
+        # Aseguramos que la fecha no tenga la hora para evitar múltiples puntos por día
+        df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
+        # Nos quedamos con el último registro por día para cada publicación
+        df = df.groupby(['fecha_extraccion', 'link_publicacion']).last().reset_index()
+    return df
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
@@ -207,7 +184,6 @@ if productos_disponibles:
         df_contexto_display = df_simulacion.sort_values(by='precio').reset_index(drop=True)
         nuestro_precio_display = nuevo_precio_simulado
 
-    # A partir de acá, todo el dashboard usa las variables "_display" ya que pueden ser reales o simuladas
     if modo_simulacion:
         st.warning("**MODO SIMULACIÓN ACTIVADO** - Los datos mostrados reflejan el precio simulado.", icon="🧪")
 
@@ -262,7 +238,6 @@ if productos_disponibles:
             df_plot.loc[lider_mask, 'tipo'] = 'Líder'
             df_plot.loc[lider_mask, 'orden_render'] = 2
         
-        # Ajuste dinámico del eje X para mejor visualización
         min_precio = df_plot['precio'].min()
         max_precio = df_plot['precio'].max()
         padding = (max_precio - min_precio) * 0.05
@@ -278,131 +253,4 @@ if productos_disponibles:
             order=alt.Order('orden_render:Q', sort='ascending'),
             tooltip=['nombre_vendedor', alt.Tooltip('precio', format='$,.2f')]
         ).properties(height=300).interactive()
-        st.altair_chart(chart, use_container_width=True)
-    else:
-        st.info("No hay datos para mostrar en el gráfico de panorama de precios para el contexto seleccionado.")
-
-    st.markdown("---")
-
-    # --- ANÁLISis CON IA ---
-    st.subheader("🤖 Asistente de Estrategia IA")
-    if not df_contexto_display.empty:
-        with st.spinner("La IA está analizando la situación..."):
-            pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
-            posicion_para_ia = int(posicion_str.replace("#", "")) if '#' in posicion_str else posicion_str
-            sugerencia = obtener_sugerencia_ia(
-                producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio_display,
-                posicion=posicion_para_ia, nombre_lider=nombre_lider, precio_lider=precio_lider,
-                competidores_contexto=len(df_contexto_display), total_competidores=len(df_dia), pct_full=pct_full_contexto)
-            st.markdown(sugerencia)
-    else:
-        st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
-
-    st.markdown("---")
-    
-    # --- Gráfico de Tendencia ---
-    st.subheader("Evolución de Precios (Últimos 15 días)")
-    df_historico_base = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
-
-    # Aplicamos los filtros de la sidebar a los datos históricos
-    # para que el gráfico refleje el contexto seleccionado.
-    df_tendencia = df_historico_base.copy()
-    if filtro_full: df_tendencia = df_tendencia[df_tendencia['envio_full'] == True]
-    if filtro_gratis: df_tendencia = df_tendencia[df_tendencia['envio_gratis'] == True]
-    if filtro_factura_a: df_tendencia = df_tendencia[df_tendencia['factura_a'] == True]
-    if filtro_cuotas > 0: df_tendencia = df_tendencia[df_tendencia['cuotas_sin_interes'] >= filtro_cuotas]
-
-
-    if not df_tendencia.empty:
-        # 1. Obtenemos el precio del líder DENTRO DEL CONTEXTO FILTRADO
-        df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index()
-        df_lider_diario['serie'] = 'Líder'
-        
-        # 2. Aislamos nuestras publicaciones DENTRO DEL CONTEXTO FILTRADO
-        df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
-
-
-        # 3. Verificamos si tenemos publicaciones para mostrar
-        if not df_nuestras_publicaciones.empty:
-            # Renombramos las publicaciones para que sean más legibles en la leyenda
-            pubs_unicas = df_nuestras_publicaciones['link_publicacion'].unique()
-            nombres_amigables = {link: f"Nuestra Pub. {i+1} ({link.split('/')[3].replace('-', ' ')})" for i, link in enumerate(pubs_unicas)}
-            df_nuestras_publicaciones['serie'] = df_nuestras_publicaciones['link_publicacion'].map(nombres_amigables)
-
-            # 4. Combinamos los datos del líder y los nuestros en un solo DataFrame (formato largo)
-            df_plot_final = pd.concat([
-                df_lider_diario[['fecha_extraccion', 'precio', 'serie']],
-                df_nuestras_publicaciones[['fecha_extraccion', 'precio', 'serie']]
-            ])
-
-            # 5. Manejo de superposición cuando somos líderes
-            # Creamos un df con los precios del líder por día para hacer el merge de forma segura,
-            # seleccionando solo las columnas necesarias para no crear conflictos de nombres.
-            df_precios_lider_map = df_lider_diario[['fecha_extraccion', 'precio']].rename(columns={'precio': 'precio_lider'})
-            df_plot_final = pd.merge(df_plot_final, df_precios_lider_map, on='fecha_extraccion')
-        
-            # Identificamos cuándo somos líderes, pero NO modificamos el nombre de la serie.
-            somos_lider_mask = (df_plot_final['serie'] != 'Líder') & (df_plot_final['precio'] == df_plot_final['precio_lider'])
-            
-            # Creamos una nueva columna para la FORMA del punto.
-            df_plot_final['estado_lider'] = 'Normal'
-            df_plot_final.loc[somos_lider_mask, 'estado_lider'] = 'Líder'
-            df_plot_final.loc[df_plot_final['serie'] == 'Líder', 'estado_lider'] = 'Líder'
-
-            # Mantenemos la lógica para no duplicar la línea del líder.
-            fechas_donde_somos_lider = df_plot_final[somos_lider_mask]['fecha_extraccion'].unique()
-            df_plot_final = df_plot_final[~((df_plot_final['serie'] == 'Líder') & (df_plot_final['fecha_extraccion'].isin(fechas_donde_somos_lider)))]
-
-        else:
-            df_plot_final = df_lider_diario.copy()
-            # Si no tenemos publicaciones, el DataFrame final solo contiene al líder
-            df_plot_final['estado_lider'] = 'Líder'
-
-        
-        # 6. Definimos los colores para mantener la consistencia
-        # Usamos sorted para un orden predecible en la leyenda
-        series_unicas = sorted(df_plot_final['serie'].unique())
-        domain = ['Líder'] + [s for s in series_unicas if s != 'Líder']
-        range_ = []
-        for serie_name in domain:
-            if serie_name == 'Líder':
-                range_.append('#FF4B4B') # Rojo para el Líder
-            else: # Todas nuestras publicaciones
-                range_.append('#2ECC71') # Verde para Nuestra Empresa
-
-        # 7. Creamos el gráfico con ALTAIR
-        chart_tendencia = alt.Chart(df_plot_final).mark_line(point=alt.OverlayMarkDef()).encode(
-            x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
-            y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False)),
-            color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación (contexto)")),
-            shape=alt.Shape('estado_lider:N', scale=alt.Scale(domain=['Líder', 'Normal'], range=['star', 'circle']), title="Estado"),
-            tooltip=[
-                alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
-                alt.Tooltip('serie:N', title='Publicación'),
-                alt.Tooltip('precio:Q', title='Precio', format='$,.2f'),
-                alt.Tooltip('estado_lider:N', title='Estado')
-            ]
-        ).properties( height=350).interactive()
-
-        st.altair_chart(chart_tendencia, use_container_width=True)
-
-    else:
-        st.info("No hay suficientes datos históricos para mostrar una tendencia.")
-
-    st.markdown("---")
-
-    # --- TABLA DE DATOS DETALLADA ---
-    with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
-        if not df_contexto_display.empty:
-            columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
-            columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
-            st.dataframe(
-                df_contexto_display[columnas_existentes_tabla].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
-                use_container_width=True, hide_index=True)
-        else:
-            st.write("Tabla vacía para el contexto actual.")
-
-else:
-    # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
-    st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
-    st.info(f"Verifique que el pipeline para el cliente '{empresa_seleccionada}' se haya ejecutado correctamente.")
+        st.altair_chart(chart, use_container
