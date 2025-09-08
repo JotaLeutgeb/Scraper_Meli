@@ -296,7 +296,7 @@ if productos_disponibles:
                 vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
         
         # --- PREPARACIÓN DEL DATAFRAME ---
-        df_nuestro['serie'] = 'Nuestra Empresa'
+        df_nuestro['serie'] = f"{NUESTRO_SELLER_NAME}"
         df_lider_diario['serie'] = df_lider_diario['nombre_vendedor']
         df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
         df_competidores['serie'] = df_competidores['nombre_vendedor']
@@ -316,9 +316,9 @@ if productos_disponibles:
             colores = None
             cols = df_para_grafico.columns.tolist()
 
-            if 'Nuestra Empresa' in cols:
+            if f"{NUESTRO_SELLER_NAME}" in cols:
                 # 1. Reordenar para que nuestra empresa esté siempre primera
-                cols.insert(0, cols.pop(cols.index('Nuestra Empresa')))
+                cols.insert(0, cols.pop(cols.index(f"{NUESTRO_SELLER_NAME}")))
                 df_para_grafico = df_para_grafico[cols]
 
                 # 2. Generar la lista de colores dinámicamente
