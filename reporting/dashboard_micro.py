@@ -123,7 +123,8 @@ st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para exp
 
 productos_disponibles = get_product_list(TABLA_CRUDOS)
 
-if productos_disponibles.empty:
+if productos_disponibles:
+    # --- TODA LA LÓGICA PRINCIPAL DEL DASHBOARD VA AQUÍ ---
     st.sidebar.header("Filtros Principales")
     producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
     df_producto = get_product_data(TABLA_CRUDOS, producto_seleccionado)
@@ -135,7 +136,7 @@ if productos_disponibles.empty:
     filtro_factura_a = st.sidebar.checkbox("Solo con Factura A", value=False)
     filtro_cuotas = st.sidebar.slider("Mínimo de cuotas sin interés", 0, 12, 0)
 
-    # --- Lógica de Filtrado (sin cambios) ---
+    # --- Lógica de Filtrado ---
     df_dia = df_producto[df_producto['fecha_extraccion'] == fecha_seleccionada].copy()
     nuestra_oferta = df_dia[df_dia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
     df_contexto = df_dia.copy()
@@ -145,52 +146,35 @@ if productos_disponibles.empty:
     if filtro_cuotas > 0: df_contexto = df_contexto[df_contexto['cuotas_sin_interes'] >= filtro_cuotas]
     df_contexto_sorted = df_contexto.sort_values(by='precio', ascending=True).reset_index(drop=True)
 
+    # --- Simulador de Escenarios ---
     st.sidebar.header("🧪 Simulador de Escenarios")
     nuestro_precio = nuestra_oferta['precio'].iloc[0] if not nuestra_oferta.empty else 0
     nuevo_precio_simulado = st.sidebar.number_input("Probar un nuevo precio para mi producto", value=None, placeholder=f"Actual: ${nuestro_precio:,.2f}")
-else:
-    # Si no hay productos, mostramos la advertencia
-    st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
-    st.info(f"Verifique que el pipeline para el cliente '{empresa_seleccionada}' se haya ejecutado correctamente.")
 
+    if nuevo_precio_simulado:
+        df_simulacion = df_contexto_sorted.copy()
+        if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
+            df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
+        else:
+            if not nuestra_oferta.empty:
+                nuestra_fila = nuestra_oferta.iloc[[0]].copy()
+                nuestra_fila.loc[:, 'precio'] = nuevo_precio_simulado
+                df_simulacion = pd.concat([df_simulacion, nuestra_fila], ignore_index=True)
 
-if nuevo_precio_simulado:
-    # Copiamos el dataframe para no alterar el original
-    df_simulacion = df_contexto_sorted.copy()
+        df_simulacion = df_simulacion.sort_values(by='precio').reset_index(drop=True)
+        
+        if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
+            nueva_posicion_num = df_simulacion.index[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
+            st.info(f"**Resultado de la simulación:** Con un precio de `${nuevo_precio_simulado:,.2f}`, tu nueva posición sería **#{nueva_posicion_num}** en este contexto.")
+            
+            with st.expander("Ver tabla de competidores con el precio simulado"):
+                columnas_simulacion = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor']
+                columnas_existentes = [col for col in columnas_simulacion if col in df_simulacion.columns]
+                st.dataframe(
+                    df_simulacion[columnas_existentes].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+                    use_container_width=True, hide_index=True)
 
-    # Actualizamos nuestro precio si existimos en el contexto
-    if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
-        df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
-    else:
-        # Si no estábamos, nos añadimos para la simulación
-        nuestra_fila = nuestra_oferta.copy()
-        nuestra_fila['precio'] = nuevo_precio_simulado
-        df_simulacion = pd.concat([df_simulacion, nuestra_fila], ignore_index=True)
-
-    # Re-ordenamos por el nuevo precio
-    df_simulacion = df_simulacion.sort_values(by='precio').reset_index(drop=True)
-
-    # Encontramos la nueva posición
-    nueva_posicion_num = df_simulacion.index[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
-
-    st.info(f"**Resultado de la simulación:** Con un precio de `${nuevo_precio_simulado:,.2f}`, tu nueva posición sería **#{nueva_posicion_num}** en este contexto.")
-
-    columnas_simulacion = [
-    'nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full',
-    'envio_gratis', 'factura_a', 'reputacion_vendedor']
-
-    # Asegurarnos que todas las columnas existan en el df_simulacion
-    columnas_existentes = [col for col in columnas_simulacion if col in df_simulacion.columns]
-
-    # Opcional: mostrar la tabla simulada
-    with st.expander("Ver tabla de competidores con el precio simulado"):
-        st.dataframe(
-        df_simulacion[columnas_existentes].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
-        use_container_width=True,hide_index=True)
-
-
-
-    # --- Visualización de Título y Métricas (sin cambios) ---
+    # --- Visualización de Título y Métricas ---
     if not df_contexto_sorted.empty:
         nombre_lider = df_contexto_sorted.iloc[0]['nombre_vendedor']
         precio_lider = df_contexto_sorted.iloc[0]['precio']
@@ -200,12 +184,12 @@ if nuevo_precio_simulado:
         nombre_lider = "N/A"
         precio_lider = 0
         st.header(f"Análisis para: {producto_seleccionado}")
+    
     st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
     st.markdown("---")
 
     col1, col2, col3, col4 = st.columns(4)
     precio_min_contexto = df_contexto_sorted['precio'].min() if not df_contexto_sorted.empty else 0
-    
     posicion_str = "N/A"
     if nuestro_precio > 0 and not df_contexto_sorted.empty and NUESTRO_SELLER_NAME in df_contexto_sorted['nombre_vendedor'].values:
         posicion_num = df_contexto_sorted.index[df_contexto_sorted['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
@@ -213,12 +197,9 @@ if nuevo_precio_simulado:
     elif nuestro_precio > 0:
         posicion_str = "Fuera de Filtro"
 
-    with col1:
-        st.metric(label="🏆 Nuestra Posición (contexto)", value=posicion_str)
-    with col2:
-        st.metric(label="💲 Nuestro Precio", value=f"${nuestro_precio:,.2f}" if nuestro_precio > 0 else "N/A")
-    with col3:
-        st.metric(label="🥇 Precio Líder (contexto)", value=f"${precio_min_contexto:,.2f}" if precio_min_contexto > 0 else "N/A")
+    with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=posicion_str)
+    with col2: st.metric(label="💲 Nuestro Precio", value=f"${nuestro_precio:,.2f}" if nuestro_precio > 0 else "N/A")
+    with col3: st.metric(label="🥇 Precio Líder (contexto)", value=f"${precio_min_contexto:,.2f}" if precio_min_contexto > 0 else "N/A")
     with col4:
         if nuestro_precio > 0 and precio_min_contexto > 0:
             dif_vs_lider = nuestro_precio - precio_min_contexto
@@ -227,70 +208,52 @@ if nuevo_precio_simulado:
             st.metric(label="💰 Diferencia vs. Líder", value="N/A")
 
     st.markdown("---")
-    
+
+    # --- Gráfico Panorama de Precios ---
     st.subheader("Panorama de Precios")
-    df_plot = df_contexto_sorted[['nombre_vendedor', 'precio']].copy()
-    df_plot['tipo'] = 'Competidor'
-    if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
-        df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
-    df_plot.loc[df_plot.index == 0, 'tipo'] = 'Líder'
+    if not df_contexto_sorted.empty:
+        df_plot = df_contexto_sorted[['nombre_vendedor', 'precio']].copy()
+        df_plot['tipo'] = 'Competidor'
+        if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
+            df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
+        df_plot.loc[df_plot.index == 0, 'tipo'] = 'Líder'
 
-    chart = alt.Chart(df_plot).mark_circle(size=100).encode(
-        x=alt.X('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f')),
-        y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
-        color=alt.Color('tipo:N',
-                        scale=alt.Scale(
-                            domain=['Líder', 'Nuestra Empresa', 'Competidor'],
-                            range=['#FF4B4B', '#2ECC71', '#3498DB']
-                        ),
-                        legend=alt.Legend(title="Leyenda")),
-        tooltip=['nombre_vendedor', 'precio']
-    ).properties(
-        height=300
-    ).interactive()
-
-    st.altair_chart(chart, use_container_width=True)
+        chart = alt.Chart(df_plot).mark_circle(size=100).encode(
+            x=alt.X('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f')),
+            y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
+            color=alt.Color('tipo:N',
+                            scale=alt.Scale(domain=['Líder', 'Nuestra Empresa', 'Competidor'], range=['#FF4B4B', '#2ECC71', '#3498DB']),
+                            legend=alt.Legend(title="Leyenda")),
+            tooltip=['nombre_vendedor', 'precio']
+        ).properties(height=300).interactive()
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("No hay datos para mostrar en el gráfico de panorama de precios.")
     
     st.markdown("---")
 
-    # ANÁLISIS CON IA
+    # --- ANÁLISIS CON IA ---
     st.subheader("🤖 Asistente de Estrategia IA")
     if not df_contexto_sorted.empty:
         with st.spinner("La IA está analizando la situación..."):
             pct_full_contexto = (df_contexto_sorted['envio_full'].sum() / len(df_contexto_sorted)) * 100 if len(df_contexto_sorted) > 0 else 0
-            
-            # Extraemos el número de la posición para pasarlo a la IA
             posicion_para_ia = int(posicion_str.replace("#", "")) if '#' in posicion_str else posicion_str
-
             sugerencia = obtener_sugerencia_ia(
-                producto=producto_seleccionado,
-                nuestro_seller=NUESTRO_SELLER_NAME,
-                nuestro_precio=nuestro_precio,
-                posicion=posicion_para_ia,
-                nombre_lider=df_contexto_sorted.iloc[0]['nombre_vendedor'],
-                precio_lider=precio_min_contexto,
-                competidores_contexto=len(df_contexto_sorted),
-                total_competidores=len(df_dia),
-                pct_full=pct_full_contexto
-            )
+                producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio,
+                posicion=posicion_para_ia, nombre_lider=df_contexto_sorted.iloc[0]['nombre_vendedor'], precio_lider=precio_min_contexto,
+                competidores_contexto=len(df_contexto_sorted), total_competidores=len(df_dia), pct_full=pct_full_contexto)
             st.markdown(sugerencia)
     else:
         st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
 
     st.markdown("---")
     
+    # --- Gráfico de Tendencia ---
     st.subheader("Evolución de Precios (Últimos 15 días)")
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - pd.Timedelta(days=15))]
-
-    # Calcular precio mínimo (líder) por día
     df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index().rename(columns={'precio': 'precio_lider'})
-
-    # Obtener nuestro precio por día
     df_nuestro_diario = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME][['fecha_extraccion', 'precio']].rename(columns={'precio': 'nuestro_precio'})
-
-    # Unir los dataframes
     df_plot_tendencia = pd.merge(df_lider_diario, df_nuestro_diario, on='fecha_extraccion', how='left')
-
     st.line_chart(df_plot_tendencia, x='fecha_extraccion', y=['precio_lider', 'nuestro_precio'])
 
     st.markdown("---")
@@ -299,16 +262,13 @@ if nuevo_precio_simulado:
     with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=True):
         if not df_contexto_sorted.empty:
             st.dataframe(
-                df_contexto_sorted[[
-                    'nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full',
-                    'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion'
-                ]].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
-                use_container_width=True,
-                hide_index=True
-            )
+                df_contexto_sorted[['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']]
+                .style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+                use_container_width=True, hide_index=True)
         else:
             st.write("Tabla vacía para el contexto actual.")
 
 else:
+    # Si la lista de productos ESTÁ vacía, se ejecuta este bloque.
     st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
     st.info(f"Verifique que el pipeline para el cliente '{empresa_seleccionada}' se haya ejecutado correctamente.")
