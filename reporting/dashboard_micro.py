@@ -6,10 +6,10 @@ import pandas as pd
 from sqlalchemy import create_engine
 from urllib.parse import quote_plus
 import google.generativeai as genai
+import altair as alt
 
 # -----------------------------------------------------------------------------
 # FUNCIONES DE CONEXIÓN Y CARGA DE DATOS
-# -----------------------------------------------------------------------------
 
 @st.cache_resource
 def get_engine():
@@ -28,24 +28,27 @@ def get_engine():
         st.stop()
 
 @st.cache_data
-def load_data(tabla_crudos: str):
-    """Carga los datos crudos de los últimos 30 días."""
+def get_product_list(tabla_crudos: str):
+    """Obtiene solo la lista de productos únicos para el selector."""
     engine = get_engine()
-    try:
-        query = f"SELECT * FROM {tabla_crudos} WHERE fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion DESC"
-        df = pd.read_sql(query, engine)
-        df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
-        return df
-    except Exception as e:
-        st.error(f"Error al cargar datos de la tabla '{tabla_crudos}': {e}.")
-        return pd.DataFrame()
-
-# -----------------------------------------------------------------------------
-# NUEVA FUNCIÓN DE INTELIGENCIA ARTIFICIAL
-# -----------------------------------------------------------------------------
+    query = f"SELECT DISTINCT nombre_producto FROM {tabla_crudos};"
+    df_products = pd.read_sql(query, engine)
+    return sorted(df_products['nombre_producto'].unique())
 
 @st.cache_data
-def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, precio_lider, competidores_contexto, total_competidores, pct_full):
+def get_product_data(tabla_crudos: str, producto: str):
+    """Carga los datos de los últimos 30 días SOLO para el producto seleccionado."""
+    engine = get_engine()
+    query = f"SELECT * FROM {tabla_crudos} WHERE nombre_producto = '{producto}' AND fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion DESC"
+    df = pd.read_sql(query, engine)
+    df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
+    return df
+
+# -----------------------------------------------------------------------------
+# FUNCIÓN DE INTELIGENCIA ARTIFICIAL
+
+@st.cache_data
+def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, nombre_lider, precio_lider, competidores_contexto, total_competidores, pct_full):
     """
     Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google.
     """
@@ -55,7 +58,7 @@ def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, pr
     except Exception as e:
         return f"Error al configurar la API de IA: {e}."
 
-    # --- INICIO DE LA MODIFICACIÓN DEL PROMPT ---
+    # # Prompt
     if posicion == "N/A" or posicion == "Fuera de Filtro":
         prompt = f"""
         **Rol:** Eres un asesor de estrategia e-commerce para Mercado Libre, experto en dar insights rápidos y accionables.
@@ -76,8 +79,10 @@ def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, pr
         **Datos Clave de Nuestra Empresa ({nuestro_seller}):**
         - Nuestro Precio: ${nuestro_precio:,.2f}.
         - Nuestra Posición: #{posicion}.
-        - Precio del Líder: ${precio_lider:,.2f}.
+        **Contexto del Mercado:**
+        - Líder Actual: *{nombre_lider}* a ${precio_lider:,.2f}.
         - Competidores en este contexto: {competidores_contexto} de {total_competidores}.
+
         - % de competidores con FULL: {pct_full:.0f}%.
         **Formato de Respuesta Obligatorio:**
         1.  **Diagnóstico (máximo 3 frases):** Un análisis breve de nuestra posición actual.
@@ -99,7 +104,6 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 
 # -----------------------------------------------------------------------------
 # CONFIGURACIÓN E INTERFAZ DEL DASHBOARD
-# -----------------------------------------------------------------------------
 
 st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
 
@@ -117,14 +121,11 @@ TABLA_CRUDOS = config_cliente['tabla_crudos']
 NUESTRO_SELLER_NAME = config_cliente['seller_name']
 st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para explorar el mercado.")
 
-# --- Carga de datos y Filtros (sin cambios) ---
-df_crudo = load_data(tabla_crudos=TABLA_CRUDOS)
-
-if not df_crudo.empty:
+if not get_product_data(TABLA_CRUDOS).empty:
     st.sidebar.header("Filtros Principales")
-    productos_disponibles = sorted(df_crudo['nombre_producto'].unique())
+    productos_disponibles = get_product_list(TABLA_CRUDOS)
     producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
-    df_producto = df_crudo[df_crudo['nombre_producto'] == producto_seleccionado]
+    df_producto = get_product_data(TABLA_CRUDOS, producto_seleccionado)
     fecha_maxima = df_producto['fecha_extraccion'].max()
     fecha_seleccionada = st.sidebar.date_input("Seleccione una Fecha", value=fecha_maxima, min_value=df_producto['fecha_extraccion'].min(), max_value=fecha_maxima, format="DD/MM/YYYY")
     st.sidebar.header("Filtros de Contexto de Mercado")
@@ -143,17 +144,60 @@ if not df_crudo.empty:
     if filtro_cuotas > 0: df_contexto = df_contexto[df_contexto['cuotas_sin_interes'] >= filtro_cuotas]
     df_contexto_sorted = df_contexto.sort_values(by='precio', ascending=True).reset_index(drop=True)
 
+    st.sidebar.header("🧪 Simulador de Escenarios")
+    nuestro_precio = nuestra_oferta['precio'].iloc[0] if not nuestra_oferta.empty else 0
+    nuevo_precio_simulado = st.sidebar.number_input("Probar un nuevo precio para mi producto", value=None, placeholder=f"Actual: ${nuestro_precio:,.2f}")
+
+    if nuevo_precio_simulado:
+        # Copiamos el dataframe para no alterar el original
+        df_simulacion = df_contexto_sorted.copy()
+
+        # Actualizamos nuestro precio si existimos en el contexto
+        if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
+            df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
+        else:
+            # Si no estábamos, nos añadimos para la simulación
+            nuestra_fila = nuestra_oferta.copy()
+            nuestra_fila['precio'] = nuevo_precio_simulado
+            df_simulacion = pd.concat([df_simulacion, nuestra_fila], ignore_index=True)
+
+        # Re-ordenamos por el nuevo precio
+        df_simulacion = df_simulacion.sort_values(by='precio').reset_index(drop=True)
+
+        # Encontramos la nueva posición
+        nueva_posicion_num = df_simulacion.index[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
+
+        st.info(f"**Resultado de la simulación:** Con un precio de `${nuevo_precio_simulado:,.2f}`, tu nueva posición sería **#{nueva_posicion_num}** en este contexto.")
+
+        columnas_simulacion = [
+        'nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full',
+        'envio_gratis', 'factura_a', 'reputacion_vendedor']
+
+        # Asegurarnos que todas las columnas existan en el df_simulacion
+        columnas_existentes = [col for col in columnas_simulacion if col in df_simulacion.columns]
+
+        # Opcional: mostrar la tabla simulada
+        with st.expander("Ver tabla de competidores con el precio simulado"):
+            st.dataframe(
+            df_simulacion[columnas_existentes].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+            use_container_width=True,hide_index=True)
+
+
+
     # --- Visualización de Título y Métricas (sin cambios) ---
     if not df_contexto_sorted.empty:
+        nombre_lider = df_contexto_sorted.iloc[0]['nombre_vendedor']
+        precio_lider = df_contexto_sorted.iloc[0]['precio']
         link_lider = df_contexto_sorted.iloc[0]['link_publicacion']
         st.header(f"[{producto_seleccionado}]({link_lider})")
     else:
+        nombre_lider = "N/A"
+        precio_lider = 0
         st.header(f"Análisis para: {producto_seleccionado}")
     st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
     st.markdown("---")
 
     col1, col2, col3, col4 = st.columns(4)
-    nuestro_precio = nuestra_oferta['precio'].iloc[0] if not nuestra_oferta.empty else 0
     precio_min_contexto = df_contexto_sorted['precio'].min() if not df_contexto_sorted.empty else 0
     
     posicion_str = "N/A"
@@ -177,8 +221,33 @@ if not df_crudo.empty:
             st.metric(label="💰 Diferencia vs. Líder", value="N/A")
 
     st.markdown("---")
+    
+    st.subheader("Panorama de Precios")
+    df_plot = df_contexto_sorted[['nombre_vendedor', 'precio']].copy()
+    df_plot['tipo'] = 'Competidor'
+    if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
+        df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
+    df_plot.loc[df_plot.index == 0, 'tipo'] = 'Líder'
 
-    # --- NUEVA SECCIÓN: ANÁLISIS CON IA ---
+    chart = alt.Chart(df_plot).mark_circle(size=100).encode(
+        x=alt.X('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f')),
+        y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
+        color=alt.Color('tipo:N',
+                        scale=alt.Scale(
+                            domain=['Líder', 'Nuestra Empresa', 'Competidor'],
+                            range=['#FF4B4B', '#2ECC71', '#3498DB']
+                        ),
+                        legend=alt.Legend(title="Leyenda")),
+        tooltip=['nombre_vendedor', 'precio']
+    ).properties(
+        height=300
+    ).interactive()
+
+    st.altair_chart(chart, use_container_width=True)
+    
+    st.markdown("---")
+
+    # ANÁLISIS CON IA
     st.subheader("🤖 Asistente de Estrategia IA")
     if not df_contexto_sorted.empty:
         with st.spinner("La IA está analizando la situación..."):
@@ -192,6 +261,7 @@ if not df_crudo.empty:
                 nuestro_seller=NUESTRO_SELLER_NAME,
                 nuestro_precio=nuestro_precio,
                 posicion=posicion_para_ia,
+                nombre_lider=df_contexto_sorted.iloc[0]['nombre_vendedor'],
                 precio_lider=precio_min_contexto,
                 competidores_contexto=len(df_contexto_sorted),
                 total_competidores=len(df_dia),
@@ -201,6 +271,23 @@ if not df_crudo.empty:
     else:
         st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
 
+    st.markdown("---")
+    
+    st.subheader("Evolución de Precios (Últimos 15 días)")
+    df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - pd.Timedelta(days=15))]
+
+    # Calcular precio mínimo (líder) por día
+    df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index().rename(columns={'precio': 'precio_lider'})
+
+    # Obtener nuestro precio por día
+    df_nuestro_diario = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME][['fecha_extraccion', 'precio']].rename(columns={'precio': 'nuestro_precio'})
+
+    # Unir los dataframes
+    df_plot_tendencia = pd.merge(df_lider_diario, df_nuestro_diario, on='fecha_extraccion', how='left')
+
+    st.line_chart(df_plot_tendencia, x='fecha_extraccion', y=['precio_lider', 'nuestro_precio'])
+
+    st.markdown("---")
 
     # --- TABLA DE DATOS DETALLADA ---
     with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=True):
