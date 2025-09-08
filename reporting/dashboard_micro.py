@@ -199,7 +199,7 @@ def obtener_sugerencia_ia(contexto: dict):
     if isinstance(contexto.get('posicion'), int):
         # Escenario 1: Estamos compitiendo en el contexto actual
         prompt = f"""
-        **Rol:** Eres "El Oráculo", un analista senior de estrategia de precios y marketplace para Mercado Libre. Tu especialidad es entender que cada decisión (bajar precio, activar FULL, ofrecer cuotas) tiene un costo asociado y un impacto directo en el margen de ganancia. Tu objetivo es maximizar la RENTABILIDAD, no solo ganar la primera posición a cualquier costo.
+        **Rol:** Eres un analista senior de estrategia de precios y marketplace para Mercado Libre. Tu especialidad es entender que cada decisión (bajar precio, activar FULL, ofrecer cuotas) tiene un costo asociado y un impacto directo en el margen de ganancia. Tu objetivo es maximizar la RENTABILIDAD, no solo ganar la primera posición a cualquier costo.
 
         **Principios de Análisis (Obligatorios):**
         - **Precio:** Bajar el precio es la solución más obvia, pero raramente la mejor. Analiza la brecha de precios. ¿Es pequeña y superable o grande y peligrosa?
@@ -272,18 +272,15 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
 
 st.title("Análisis Táctico con Asistente IA")
-st.sidebar.header("Selección de Empresa")
 
 try:
-    lista_empresas = list(st.secrets.clients.keys())
+    config_cliente = st.secrets["client_config"]
+    TABLA_CRUDOS = config_cliente['tabla_crudos']
+    NUESTRO_SELLER_NAME = config_cliente['seller_name']
 except Exception:
     st.error("Error: No se encontró la configuración de clientes en los secretos (secrets.toml).")
     st.stop()
 
-empresa_seleccionada = st.sidebar.selectbox("Seleccione la empresa", options=lista_empresas, format_func=lambda x: x.capitalize())
-config_cliente = st.secrets.clients[empresa_seleccionada]
-TABLA_CRUDOS = config_cliente['tabla_crudos']
-NUESTRO_SELLER_NAME = config_cliente['seller_name']
 st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para explorar el mercado.")
 
 productos_disponibles = get_product_list(TABLA_CRUDOS)
@@ -424,7 +421,7 @@ if productos_disponibles:
 
 
     # --- ANÁLISIS CON IA ---
-    st.subheader("🤖 El Oráculo Estratégico")
+    st.subheader("Recomendaciones Estratégicas con IA")
     if not df_contexto_display.empty or kpis['posicion_str'] in ["Fuera de Filtro", "N/A"]:
         with st.spinner("El Oráculo está analizando la rentabilidad y los trade-offs..."):
             pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
@@ -447,7 +444,6 @@ if productos_disponibles:
     else:
         st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
 
-
     st.markdown("---")
 
     # --- TABLA DE DATOS DETALLADA ---
@@ -464,4 +460,4 @@ if productos_disponibles:
 else:
     # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
     st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
-    st.info(f"Verifique que el pipeline para el cliente '{empresa_seleccionada}' se haya ejecutado correctamente.")
+    st.info(f"Verifique que el pipeline para '{NUESTRO_SELLER_NAME}' se haya ejecutado correctamente.")
