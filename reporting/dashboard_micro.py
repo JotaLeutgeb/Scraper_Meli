@@ -276,91 +276,59 @@ if productos_disponibles:
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
     if not df_tendencia.empty:
-        # 1. Obtenemos el precio del líder por día
-        df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index()
-        df_lider_diario['serie'] = 'Líder'
+        # 1. Copiamos el df
+        df_plot_final = df_tendencia[['fecha_extraccion', 'precio', 'nombre_vendedor', 'link_publicacion']].copy()
 
-        # 2. Aislamos nuestras publicaciones
-        df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
+        # 2. Crear una columna 'tipo' para diferenciar nuestras publicaciones
+        df_plot_final['tipo'] = df_plot_final['nombre_vendedor'].apply(lambda x: 'Nuestra Empresa' if x == NUESTRO_SELLER_NAME else 'Competidor')
 
-        # 3. Verificamos si tenemos publicaciones para mostrar
-        if not df_nuestras_publicaciones.empty:
-            # Renombramos las publicaciones para que sean más legibles
-            pubs_unicas = df_nuestras_publicaciones['link_publicacion'].unique()
-            nombres_amigables = {link: f"Nuestra Pub. {i+1} ({link.split('/')[3].replace('-', ' ')})" for i, link in enumerate(pubs_unicas)}
-            df_nuestras_publicaciones['serie'] = df_nuestras_publicaciones['link_publicacion'].map(nombres_amigables)
+        # 3. Crear una columna para identificar el punto de precio más bajo de cada día
+        min_precios_diarios = df_plot_final.groupby('fecha_extraccion')['precio'].transform('min')
+        df_plot_final['es_lider'] = df_plot_final['precio'] == min_precios_diarios
+        
+        # 4. nombre amigable para la leyenda
+        pubs_unicas = df_plot_final['link_publicacion'].unique()
+        nombres_amigables = {link: f"{df_plot_final[df_plot_final['link_publicacion'] == link].iloc[0]['nombre_vendedor']} ({link.split('/')[3]})" for link in pubs_unicas}
+        df_plot_final['publicacion_leyenda'] = df_plot_final['link_publicacion'].map(nombres_amigables)
 
-            # 4. Combinamos los datos del líder y los nuestros
-            df_plot_final = pd.concat([
-                df_lider_diario[['fecha_extraccion', 'precio', 'serie']],
-                df_nuestras_publicaciones[['fecha_extraccion', 'precio', 'serie']]
-            ])
-            
-            ### CAMBIO CLAVE 1: Crear una columna 'estado' para el estilo visual
-            # Copiamos la 'serie' a 'estado' para tener una base. 'serie' se mantendrá intacta.
-            df_plot_final['estado'] = df_plot_final['serie']
+        base = alt.Chart(df_plot_final)
 
-            # 5. LÓGICA DE SUPERPOSICIÓN (ahora modifica la columna 'estado')
-            df_precios_lider_map = df_lider_diario[['fecha_extraccion', 'precio']].rename(columns={'precio': 'precio_lider'})
-            df_plot_final = pd.merge(df_plot_final, df_precios_lider_map, on='fecha_extraccion')
-            
-            somos_lider_mask = (df_plot_final['serie'] != 'Líder') & (df_plot_final['precio'] == df_plot_final['precio_lider'])
-            
-            # Modificamos la columna 'estado', no 'serie'
-            df_plot_final.loc[somos_lider_mask, 'estado'] = df_plot_final['serie'] + ' (Líder)'
-
-            fechas_donde_somos_lider = df_plot_final[somos_lider_mask]['fecha_extraccion'].unique()
-            df_plot_final = df_plot_final[~((df_plot_final['serie'] == 'Líder') & (df_plot_final['fecha_extraccion'].isin(fechas_donde_somos_lider)))]
-        else:
-            df_plot_final = df_lider_diario
-            df_plot_final['estado'] = df_plot_final['serie'] # Aseguramos que la columna 'estado' exista siempre
-
-        ### CAMBIO CLAVE 2: La lógica de colores ahora se basa en la columna 'estado'
-        # 6. Definimos los colores para mantener la consistencia
-        estados_unicos = sorted(df_plot_final['estado'].unique())
-        domain = ['Líder'] + [s for s in estados_unicos if s != 'Líder']
-        range_ = []
-        for estado_name in domain:
-            if '(Líder)' in estado_name:
-                range_.append('#2ECC71') # Verde brillante si somos líderes
-            elif 'Nuestra Pub' in estado_name:
-                range_.append('#2ECC71') # Verde para nuestras publicaciones
-            elif estado_name == 'Líder':
-                range_.append('#FF4B4B') # Rojo para el competidor líder
-
-        ### CAMBIO CLAVE 3: Ajuste del 'encode' en Altair
-        # 7. Creamos el gráfico con ALTAIR
-        chart_tendencia = alt.Chart(df_plot_final).mark_line(point=True).encode(
+        # 6. Capa de LÍNEAS: Conecta los puntos para cada publicación
+        lines = base.mark_line().encode(
             x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
             y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False)),
-            # El color se basa en 'estado', que cambia.
-            color=alt.Color('estado:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación")),
-            # 'detail' le dice a Altair que agrupe por 'serie' para trazar la línea, independientemente del color.
-            detail='serie:N', 
+            # El color depende de si es nuestra empresa o un competidor
+            color=alt.Color('tipo:N', 
+                scale=alt.Scale(
+                    domain=['Nuestra Empresa', 'Competidor'], 
+                    range=['#2ECC71', '#3498DB'] # Verde para nosotros, Azul para competidores
+                ), 
+                legend=alt.Legend(title="Vendedor")
+            ),
+            # 'detail' asegura que cada publicación tenga su propia línea separada
+            detail='publicacion_leyenda:N'
+        )
+
+        # 7. Capa de ESTRELLAS: Pone una estrella solo en los puntos de precio más bajo
+        stars = base.mark_point(shape='star', size=200, filled=True, color='#FFD700').encode(
+            x=alt.X('fecha_extraccion:T'),
+            y=alt.Y('precio:Q'),
             tooltip=[
                 alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
-                alt.Tooltip('serie:N', title='Publicación'), # Mostramos el nombre limpio y constante
+                alt.Tooltip('nombre_vendedor:N', title='Vendedor Líder'),
                 alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
             ]
-        ).properties(
-            height=350
-        ).interactive()
-
-        st.altair_chart(chart_tendencia, use_container_width=True)
+        ).transform_filter(
+            alt.datum.es_lider == True # Filtro para dibujar la estrella solo si es_lider es True
+        )
+        
+        # 8. Combinar las dos capas (líneas + estrellas) y añadir interactividad
+        chart_final = (lines + stars).interactive().properties(height=350)
+        
+        st.altair_chart(chart_final, use_container_width=True)
 
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
-
-    # --- TABLA DE DATOS DETALLADA ---
-    with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
-        if not df_contexto_display.empty:
-            columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
-            columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
-            st.dataframe(
-                df_contexto_display[columnas_existentes_tabla].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
-                use_container_width=True, hide_index=True)
-        else:
-            st.write("Tabla vacía para el contexto actual.")
 
 else:
     # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
