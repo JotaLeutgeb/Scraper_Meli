@@ -45,7 +45,7 @@ def get_product_list(tabla_crudos: str):
 def get_product_data(tabla_crudos: str, producto: str):
     """
     Carga los datos de los últimos 30 días SOLO para el producto seleccionado,
-    asegurando un único registro por publicación por día (el último).
+    limpia fechas inválidas y asegura un único registro por publicación por día (el último).
     """
     engine = get_engine()
     query = f"SELECT * FROM {tabla_crudos} WHERE nombre_producto = %(producto)s AND fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion ASC"
@@ -54,23 +54,28 @@ def get_product_data(tabla_crudos: str, producto: str):
     if df.empty:
         return pd.DataFrame()
 
-    # --- LÓGICA DE AGREGACIÓN DIARIA (CORREGIDA) ---
-    df['fecha_dia'] = pd.to_datetime(df['fecha_extraccion']).dt.date
+    # --- LÓGICA DE VALIDACIÓN Y LIMPIEZA DE FECHAS (NUEVO) ---
+    # 1. Convertimos la columna a datetime. 'coerce' transformará errores/nulos en NaT (Not a Time).
+    df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion'], errors='coerce')
     
-    # Definimos las claves de agrupación.
+    # 2. Eliminamos cualquier fila que tenga NaT en la columna de fecha.
+    df.dropna(subset=['fecha_extraccion'], inplace=True)
+    
+    # Si después de limpiar no quedan datos, devolvemos un DataFrame vacío.
+    if df.empty:
+        return pd.DataFrame()
+
+    # --- LÓGICA DE AGREGACIÓN DIARIA ---
+    df['fecha_dia'] = df['fecha_extraccion'].dt.date
+    
     grouping_keys = ['fecha_dia', 'link_publicacion']
-    # Seleccionamos las columnas a agregar, EXCLUYENDO las claves.
     agg_cols = [col for col in df.columns if col not in grouping_keys]
     
-    # Agrupamos por día y publicación, y nos quedamos con el ÚLTIMO registro del día.
-    # Esta separación evita el conflicto de nombres en reset_index.
     df_agregado = df.groupby(grouping_keys)[agg_cols].last().reset_index()
 
-    # Renombramos la columna de fecha para que coincida con el resto del script.
     df_final = df_agregado.rename(columns={'fecha_dia': 'fecha_extraccion'})
     
     return df_final
-
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
