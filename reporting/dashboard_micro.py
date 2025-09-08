@@ -276,59 +276,77 @@ if productos_disponibles:
     df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
     if not df_tendencia.empty:
-        # 1. Copiamos el df
+        # 1. Preparar un DataFrame con todas las publicaciones
         df_plot_final = df_tendencia[['fecha_extraccion', 'precio', 'nombre_vendedor', 'link_publicacion']].copy()
 
         # 2. Crear una columna 'tipo' para diferenciar nuestras publicaciones
         df_plot_final['tipo'] = df_plot_final['nombre_vendedor'].apply(lambda x: 'Nuestra Empresa' if x == NUESTRO_SELLER_NAME else 'Competidor')
 
-        # 3. Crear una columna para identificar el punto de precio más bajo de cada día
+        # 3. Identificar el punto de precio más bajo de cada día
         min_precios_diarios = df_plot_final.groupby('fecha_extraccion')['precio'].transform('min')
         df_plot_final['es_lider'] = df_plot_final['precio'] == min_precios_diarios
         
-        # 4. nombre amigable para la leyenda
+        # 4. Crear un nombre amigable para la leyenda y el 'detail'
         pubs_unicas = df_plot_final['link_publicacion'].unique()
         nombres_amigables = {link: f"{df_plot_final[df_plot_final['link_publicacion'] == link].iloc[0]['nombre_vendedor']} ({link.split('/')[3]})" for link in pubs_unicas}
         df_plot_final['publicacion_leyenda'] = df_plot_final['link_publicacion'].map(nombres_amigables)
 
-        base = alt.Chart(df_plot_final)
-
-        # 6. Capa de LÍNEAS: Conecta los puntos para cada publicación
-        lines = base.mark_line().encode(
+        # 5. Crear el gráfico base en Altair
+        base = alt.Chart(df_plot_final).encode(
             x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
-            y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False)),
-            # El color depende de si es nuestra empresa o un competidor
+            y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False))
+        )
+
+        # 6. Capa de LÍNEAS
+        lines = base.mark_line().encode(
             color=alt.Color('tipo:N', 
-                scale=alt.Scale(
-                    domain=['Nuestra Empresa', 'Competidor'], 
-                    range=['#2ECC71', '#3498DB'] # Verde para nosotros, Azul para competidores
-                ), 
+                scale=alt.Scale(domain=['Nuestra Empresa', 'Competidor'], range=['#2ECC71', '#3498DB']), 
                 legend=alt.Legend(title="Vendedor")
             ),
-            # 'detail' asegura que cada publicación tenga su propia línea separada
             detail='publicacion_leyenda:N'
         )
 
-        # 7. Capa de ESTRELLAS: Pone una estrella solo en los puntos de precio más bajo
+        # 7. CAMBIO CLAVE: Capa de PUNTOS (para asegurar visibilidad de datos únicos)
+        points = base.mark_point(size=50, filled=True).encode(
+            color=alt.Color('tipo:N', scale=alt.Scale(domain=['Nuestra Empresa', 'Competidor'], range=['#2ECC71', '#3498DB'])),
+            detail='publicacion_leyenda:N',
+            tooltip=[
+                alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
+                alt.Tooltip('nombre_vendedor:N', title='Vendedor'),
+                alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
+            ]
+        )
+
+        # 8. Capa de ESTRELLAS para el líder
         stars = base.mark_point(shape='star', size=200, filled=True, color='#FFD700').encode(
-            x=alt.X('fecha_extraccion:T'),
-            y=alt.Y('precio:Q'),
             tooltip=[
                 alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
                 alt.Tooltip('nombre_vendedor:N', title='Vendedor Líder'),
                 alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
             ]
         ).transform_filter(
-            alt.datum.es_lider == True # Filtro para dibujar la estrella solo si es_lider es True
+            alt.datum.es_lider == True
         )
         
-        # 8. Combinar las dos capas (líneas + estrellas) y añadir interactividad
-        chart_final = (lines + stars).interactive().properties(height=350)
+        # 9. Combinar las TRES capas y añadir interactividad
+        chart_final = (lines + points + stars).interactive().properties(height=350)
         
         st.altair_chart(chart_final, use_container_width=True)
 
     else:
         st.info("No hay suficientes datos históricos para mostrar una tendencia.")
+
+    # --- TABLA DE DATOS DETALLADA ---
+    with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
+        if not df_contexto_display.empty:
+            columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
+            columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
+            st.dataframe(
+                df_contexto_display[columnas_existentes_tabla].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+                use_container_width=True, hide_index=True)
+        else:
+            st.write("Tabla vacía para el contexto actual.")
+
 
 else:
     # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
