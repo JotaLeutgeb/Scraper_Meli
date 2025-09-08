@@ -287,7 +287,8 @@ if productos_disponibles:
     if not df_tendencia.empty:
         # 1. Obtenemos el precio del líder DENTRO DEL CONTEXTO FILTRADO
         df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index()
-
+        df_lider_diario['serie'] = 'Líder'
+        
         # 2. Aislamos nuestras publicaciones DENTRO DEL CONTEXTO FILTRADO
         df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
 
