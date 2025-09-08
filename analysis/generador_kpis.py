@@ -1,18 +1,19 @@
 #generador kpis
 import pandas as pd
+from datetime import date
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from io import StringIO
 from urllib.parse import quote_plus
 
-def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_name: str):
+def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_name: str, fecha_kpis: date):
     """
     Lee los datos crudos del día, calcula la "foto" de KPIs,
     y la inserta/actualiza en la tabla de KPIs.
     """
     load_dotenv()
-    print("\nIniciando la generación de la foto diaria de KPIs...")
+    print("\nIniciando el registro diario de KPIs...")
     
     # Usamos SQLAlchemy para una mejor integración con Pandas
     db_password_encoded = quote_plus(os.getenv('DB_PASSWORD'))
@@ -42,7 +43,7 @@ def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_n
             -- Rankeamos a todos los competidores por precio para saber la posición
             ROW_NUMBER() OVER(PARTITION BY id_catalogo ORDER BY precio ASC, item_id ASC) as posicion_precio_actual
         FROM {source_table}
-        WHERE fecha_extraccion = CURRENT_DATE
+        WHERE fecha_extraccion = %s
     )
     -- Agrupamos todo por producto para generar la única fila de KPIs del día
     SELECT
@@ -76,10 +77,10 @@ def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_n
     
     try:
         with engine.connect() as connection:
-            df_kpis = pd.read_sql(query_kpis, connection)
+            df_kpis = pd.read_sql(query_kpis, connection, params=(fecha_kpis,))
 
             if df_kpis.empty:
-                print("-> No se encontraron datos de hoy para generar KPIs.")
+                print(f"-> No se encontraron datos para la fecha {fecha_kpis} para generar KPIs.")
                 return
 
             print(f"-> Foto de KPIs generada para {len(df_kpis)} producto(s).")
@@ -114,11 +115,3 @@ def ejecutar_generacion_kpis(source_table: str, kpi_table: str, nuestro_seller_n
 
     except Exception as e:
         print(f"--- ERROR durante la generación de KPIs: {e}")
-
-if __name__ == '__main__':
-    # Esto es solo para pruebas directas del script
-    ejecutar_generacion_kpis(
-        source_table='dinamo_registros_precios', 
-        kpi_table='kpis_diarios_producto',
-        nuestro_seller_name='Dinamo Materiales Electricos'
-    )

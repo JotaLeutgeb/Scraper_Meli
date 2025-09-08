@@ -34,7 +34,6 @@ def inicializar_base_de_datos():
                         categoria_principal VARCHAR(100),
                         categoria_secundaria VARCHAR(100),
                         precio NUMERIC(12, 2) NOT NULL,
-                        condicion_producto VARCHAR(50),
                         nombre_vendedor TEXT,
                         cuotas_sin_interes INTEGER,
                         envio_full BOOLEAN,

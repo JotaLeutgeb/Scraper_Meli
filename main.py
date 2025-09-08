@@ -1,4 +1,5 @@
 import time
+from datetime import date
 import yaml # Para leer el archivo de configuración
 from scraping.procesador_datos import ejecutar_proceso_para_url
 from analysis.generador_kpis import ejecutar_generacion_kpis
@@ -24,6 +25,9 @@ def main():
     config = cargar_configuracion()
     if not config:
         return
+    
+    fecha_ejecucion = date.today()
+
 
     # Seleccionar la configuración para nuestra empresa target
     if len(config) != 1:
@@ -36,6 +40,7 @@ def main():
     
     print("======================================================")
     print(f"==  INICIO PIPELINE PARA: {empresa_target.upper()}  ==")
+    print(f"==  FECHA DE EJECUCIÓN: {fecha_ejecucion}           ==")
     print("======================================================")
 
     start_time = time.time()
@@ -68,7 +73,7 @@ def main():
     print(f"\n[FASE 2] Generando KPIs desde '{tabla_crudos}' hacia '{tabla_kpis}'")
     try:
         # Pasamos los nombres de las tablas y el seller_name como parámetros
-        ejecutar_generacion_kpis(tabla_crudos, tabla_kpis, seller_name)
+        ejecutar_generacion_kpis(tabla_crudos, tabla_kpis, seller_name, fecha_ejecucion)
     except Exception as e:
         print(f"!! ERROR INESPERADO en la generación de KPIs: {e}")
 
