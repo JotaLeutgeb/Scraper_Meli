@@ -187,7 +187,7 @@ def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
 
 @st.cache_data
-def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, nombre_lider, precio_lider, competidores_contexto, total_competidores, pct_full):
+def obtener_sugerencia_ia(contexto: dict):
     """Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google."""
     try:
         genai.configure(api_key=st.secrets.google_ai["api_key"])
@@ -195,35 +195,65 @@ def obtener_sugerencia_ia(producto, nuestro_seller, nuestro_precio, posicion, no
     except Exception as e:
         return f"Error al configurar la API de IA: {e}."
 
-    if posicion in ["N/A", "Fuera de Filtro"]:
+    # Determinar si estamos compitiendo activamente o estamos fuera del contexto
+    if isinstance(contexto.get('posicion'), int):
+        # Escenario 1: Estamos compitiendo en el contexto actual
         prompt = f"""
-        **Rol:** Eres un asesor de estrategia e-commerce para Mercado Libre, experto en dar insights rápidos y accionables.
-        **Tarea:** Analiza por qué nuestra empresa, "{nuestro_seller}", no compite en este segmento específico del producto "{producto}" y da recomendaciones.
-        **Datos Clave:**
-        - Precio del líder: ${precio_lider:,.2f}.
-        - Competidores en este segmento: {competidores_contexto} de {total_competidores}.
-        - % de competidores con FULL: {pct_full:.0f}%.
-        **Formato de Respuesta Obligatorio:**
-        1.  **Diagnóstico (máximo 2 frases):** Un análisis breve de la situación.
-        2.  **Recomendaciones (máximo 2 bullet points):** Dos acciones directas y concisas.
-        **Restricciones:** Sé extremadamente breve. Sin introducciones, saludos ni conclusiones. Ve directo al punto.
+        **Rol:** Eres "El Oráculo", un analista senior de estrategia de precios y marketplace para Mercado Libre. Tu especialidad es entender que cada decisión (bajar precio, activar FULL, ofrecer cuotas) tiene un costo asociado y un impacto directo en el margen de ganancia. Tu objetivo es maximizar la RENTABILIDAD, no solo ganar la primera posición a cualquier costo.
+
+        **Principios de Análisis (Obligatorios):**
+        - **Precio:** Bajar el precio es la solución más obvia, pero raramente la mejor. Analiza la brecha de precios. ¿Es pequeña y superable o grande y peligrosa?
+        - **Envío FULL:** NO lo recomiendes como una "ventaja competitiva" genérica. Reconoce que implica costos logísticos (envío a bodega) y de almacenamiento. Solo sugiérelo si el %% de competidores con FULL es abrumadoramente alto (ej. >70%), convirtiéndolo en un estándar del mercado para este producto.
+        - **Envío Gratis y Cuotas:** Trátalos como costos directos que impactan el margen. Recomiéndalos solo como diferenciadores estratégicos si el precio no es la única variable de competencia.
+
+        **Tarea:** Basado en los datos, genera un diagnóstico y 2 opciones estratégicas claras.
+
+        **Contexto del Análisis:**
+        - Producto: "{contexto['producto']}"
+        - Nuestra Empresa: "{contexto['nuestro_seller']}"
+        - Nuestro Precio: ${contexto['nuestro_precio']:,.2f}
+        - Nuestra Posición: #{contexto['posicion']}
+        - Líder Actual: "{contexto['nombre_lider']}" a ${contexto['precio_lider']:,.2f}
+        - Competidores en el contexto: {contexto['competidores_contexto']} de {contexto['total_competidores']} en total.
+        - Dominio de FULL en el contexto: {contexto['pct_full']:.0f}%
+
+        **Formato de Respuesta (Obligatorio):**
+        1.  **Diagnóstico (1 frase):** Un resumen ejecutivo de la situación actual.
+        2.  **Opción Estratégica 1:**
+            * **Acción:** Una recomendación clara y directa.
+            * **Justificación:** El porqué de esta acción, mencionando el trade-off (ej. "sacrificando X para ganar Y").
+        3.  **Opción Estratégica 2:**
+            * **Acción:** Una recomendación alternativa.
+            * **Justificación:** El porqué de esta segunda opción, explicando un enfoque diferente.
+
+        **Restricciones:** Sé conciso, táctico y orientado a la rentabilidad. No uses saludos ni introducciones. Usa Markdown para negritas.
         """
     else:
+        # Escenario 2: No estamos compitiendo (N/A o Fuera de Filtro)
         prompt = f"""
-        **Rol:** Eres un asesor de estrategia e-commerce para Mercado Libre, experto en dar insights rápidos y accionables.
-        **Tarea:** Analiza nuestra posición para el producto "{producto}" y da recomendaciones.
-        **Datos Clave de Nuestra Empresa ({nuestro_seller}):**
-        - Nuestro Precio: ${nuestro_precio:,.2f}.
-        - Nuestra Posición: #{posicion}.
+        **Rol:** Eres "El Oráculo", un analista senior de estrategia de precios y marketplace para Mercado Libre. Tu especialidad es entender que cada decisión tiene un costo asociado y un impacto en el margen de ganancia.
+
+        **Principios de Análisis (Obligatorios):**
+        - **Precio:** Bajar el precio es la solución más obvia, pero raramente la mejor.
+        - **Envío FULL:** Reconoce que implica costos logísticos y de almacenamiento. Es una barrera de entrada si el mercado lo adoptó como estándar.
+        - **Envío Gratis y Cuotas:** Trátalos como costos directos que impactan el margen.
+
+        **Tarea:** Nuestra empresa, "{contexto['nuestro_seller']}", no aparece en el contexto filtrado del producto "{contexto['producto']}". Analiza las posibles barreras de entrada y da una recomendación estratégica.
+
         **Contexto del Mercado:**
-        - Líder Actual: *{nombre_lider}* a ${precio_lider:,.2f}.
-        - Competidores en este contexto: {competidores_contexto} de {total_competidores}.
-        - % de competidores con FULL: {pct_full:.0f}%.
-        **Formato de Respuesta Obligatorio:**
-        1.  **Diagnóstico (máximo 3 frases):** Un análisis breve de nuestra posición actual.
-        2.  **Recomendaciones (máximo 2 bullet points):** Dos acciones claras, directas y concisas.
-        **Restricciones:** Sé extremadamente breve. Sin introducciones, saludos ni conclusiones. Ve directo al punto. Usa Markdown para negritas (*palabra*).
+        - Líder Actual: "{contexto['nombre_lider']}" a ${contexto['precio_lider']:,.2f}
+        - Competidores en este contexto: {contexto['competidores_contexto']} de {contexto['total_competidores']} en total.
+        - Dominio de FULL en el contexto: {contexto['pct_full']:.0f}%
+
+        **Formato de Respuesta (Obligatorio):**
+        1.  **Diagnóstico (1 frase):** Un análisis de por qué no estamos calificando en este segmento (ej. "El segmento está dominado por vendedores con FULL, lo que representa una barrera logística.").
+        2.  **Recomendación Estratégica:**
+            * **Acción:** Recomendar si entrar a competir (y cómo) o si es mejor enfocar esfuerzos en otro lado.
+            * **Justificación:** Explicar el costo/beneficio de la recomendación.
+
+        **Restricciones:** Sé conciso, táctico y orientado a la rentabilidad. No uses saludos ni introducciones.
         """
+
     try:
         response = model.generate_content(prompt)
         return response.text
@@ -241,7 +271,7 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 
 st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
 
-st.title("🔬 Análisis Táctico con Asistente IA")
+st.title("Análisis Táctico con Asistente IA")
 st.sidebar.header("Selección de Empresa")
 
 try:
@@ -394,20 +424,29 @@ if productos_disponibles:
 
 
     # --- ANÁLISIS CON IA ---
-    st.subheader("🤖 Asistente de Estrategia IA")
-    if not df_contexto_display.empty:
-        with st.spinner("La IA está analizando la situación..."):
+    st.subheader("🤖 El Oráculo Estratégico")
+    if not df_contexto_display.empty or kpis['posicion_str'] in ["Fuera de Filtro", "N/A"]:
+        with st.spinner("El Oráculo está analizando la rentabilidad y los trade-offs..."):
             pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
-            # Usar la posición numérica para la IA si está disponible, si no, el string 'Fuera de Filtro' o 'N/A'
-            posicion_para_ia = kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str']
             
-            sugerencia = obtener_sugerencia_ia(
-                producto=producto_seleccionado, nuestro_seller=NUESTRO_SELLER_NAME, nuestro_precio=nuestro_precio_display,
-                posicion=posicion_para_ia, nombre_lider=kpis['nombre_lider'], precio_lider=kpis['precio_lider'],
-                competidores_contexto=kpis['cant_total'], total_competidores=len(df_dia), pct_full=pct_full_contexto)
+            # Crear el diccionario de contexto para la IA
+            contexto_ia = {
+                "producto": producto_seleccionado,
+                "nuestro_seller": NUESTRO_SELLER_NAME,
+                "nuestro_precio": nuestro_precio_display,
+                "posicion": kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'],
+                "nombre_lider": kpis['nombre_lider'],
+                "precio_lider": kpis['precio_lider'],
+                "competidores_contexto": kpis['cant_total'],
+                "total_competidores": len(df_dia),
+                "pct_full": pct_full_contexto
+            }
+            
+            sugerencia = obtener_sugerencia_ia(contexto_ia)
             st.markdown(sugerencia)
     else:
         st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
+
 
     st.markdown("---")
 
