@@ -273,15 +273,27 @@ if productos_disponibles:
     
     # --- Gráfico de Tendencia ---
     st.subheader("Evolución de Precios (Últimos 15 días)")
-    df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
+    df_historico_base = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
+
+    # Aplicamos los filtros de la sidebar a los datos históricos
+    # para que el gráfico refleje el contexto seleccionado.
+    df_tendencia = df_historico_base.copy()
+    if filtro_full: df_tendencia = df_tendencia[df_tendencia['envio_full'] == True]
+    if filtro_gratis: df_tendencia = df_tendencia[df_tendencia['envio_gratis'] == True]
+    if filtro_factura_a: df_tendencia = df_tendencia[df_tendencia['factura_a'] == True]
+    if filtro_cuotas > 0: df_tendencia = df_tendencia[df_tendencia['cuotas_sin_interes'] >= filtro_cuotas]
+
 
     if not df_tendencia.empty:
-        # 1. Obtenemos el precio del líder por día
+        # 1. Obtenemos el precio del líder DENTRO DEL CONTEXTO FILTRADO
         df_lider_diario = df_tendencia.groupby('fecha_extraccion')['precio'].min().reset_index()
-        df_lider_diario['serie'] = 'Líder'
 
-        # 2. Aislamos nuestras publicaciones
+        # 2. Aislamos nuestras publicaciones DENTRO DEL CONTEXTO FILTRADO
         df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
+
+        # Preparamos el DataFrame del líder para la concatenación
+        df_lider_plot = df_lider_diario.copy()
+        df_lider_plot['serie'] = 'Líder'
 
         # 3. Verificamos si tenemos publicaciones para mostrar
         if not df_nuestras_publicaciones.empty:
