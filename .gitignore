@@ -9,6 +9,7 @@ scraping/
 database/
 analysis/
 main.py
+*.yml
 
 # ###########################
 # ## Dependencias y Entornos Virtuales de Python
