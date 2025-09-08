@@ -21,7 +21,7 @@ def get_engine():
         db_port = st.secrets["db_port"]
         db_name = st.secrets["db_name"]
         db_password_encoded = quote_plus(db_password_raw)
-        conn_string = f"postgresql://{db_user}:{db_password_encoded}@{db_host}:{db_port}/{db_name}"
+        conn_string = f"postgresql+psycopg://{db_user}:{db_password_encoded}@{db_host}:{db_port}/{db_name}"
         return create_engine(conn_string)
     except Exception as e:
         st.error(f"Error al configurar la conexión con la base de datos: {e}")
