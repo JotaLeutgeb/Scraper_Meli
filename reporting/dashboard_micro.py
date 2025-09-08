@@ -200,10 +200,11 @@ if productos_disponibles:
     if nuestro_precio_display > 0 and not df_contexto_display.empty and NUESTRO_SELLER_NAME in df_contexto_display['nombre_vendedor'].values:
         posicion_num = df_contexto_display.index[df_contexto_display['nombre_vendedor'] == NUESTRO_SELLER_NAME][0] + 1
         posicion_str = f"#{posicion_num}"
+        cant_total = len(df_contexto_display)
     elif nuestro_precio_display > 0:
         posicion_str = "Fuera de Filtro"
 
-    with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=posicion_str)
+    with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=f"{posicion_str} de {cant_total}")
     with col2: st.metric(label="💲 Nuestro Precio", value=f"${nuestro_precio_display:,.2f}" if nuestro_precio_display > 0 else "N/A")
     with col3: st.metric(label="🥇 Precio Líder (contexto)", value=f"${precio_lider:,.2f}" if precio_lider > 0 else "N/A")
     with col4:
