@@ -124,7 +124,7 @@ st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para exp
 productos_disponibles = get_product_list(TABLA_CRUDOS)
 
 if productos_disponibles:
-    # --- TODA LA LÓGICA PRINCIPAL DEL DASHBOARD VA AQUÍ ---
+    # --- LÓGICA PRINCIPAL DEL DASHBOARD ---
     st.sidebar.header("Filtros Principales")
     producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
     df_producto = get_product_data(TABLA_CRUDOS, producto_seleccionado)
@@ -213,17 +213,40 @@ if productos_disponibles:
     st.subheader("Panorama de Precios")
     if not df_contexto_sorted.empty:
         df_plot = df_contexto_sorted[['nombre_vendedor', 'precio']].copy()
-        df_plot['tipo'] = 'Competidor'
-        if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
-            df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
-        df_plot.loc[df_plot.index == 0, 'tipo'] = 'Líder'
 
-        chart = alt.Chart(df_plot).mark_circle(size=100).encode(
+        # --- Lógica de coloreado y ordenamiento ---
+        # Procedimiento para priorizar el renderizado de la empresa dirigida al análisis.
+        # Así, evitamos que quede oculta detrás de otros puntos en el gráfico.
+        
+        df_plot['tipo'] = 'Competidor'
+        df_plot['orden_render'] = 1  # Los competidores se dibujan primero (al fondo)
+
+        # 2. Identificamos al líder, pero aún no lo pintamos
+        lider_vendedor_nombre = df_plot.iloc[0]['nombre_vendedor']
+
+        # 3. Asignamos "Nuestra Empresa" con MÁXIMA prioridad de renderizado
+        if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
+            nuestra_empresa_mask = df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME
+            df_plot.loc[nuestra_empresa_mask, 'tipo'] = 'Nuestra Empresa'
+            df_plot.loc[nuestra_empresa_mask, 'orden_render'] = 3 # Nuestra empresa se dibuja al final (encima de todo)
+
+        # 4. Asignamos "Líder" SOLO SI no somos nosotros.
+        if lider_vendedor_nombre != NUESTRO_SELLER_NAME:
+            lider_mask = df_plot['nombre_vendedor'] == lider_vendedor_nombre
+            df_plot.loc[lider_mask, 'tipo'] = 'Líder'
+            df_plot.loc[lider_mask, 'orden_render'] = 2 # El líder se dibuja en la capa intermedia
+
+        # --- Definición del gráfico ---
+        chart = alt.Chart(df_plot).mark_circle(size=120).encode(
             x=alt.X('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f')),
             y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
             color=alt.Color('tipo:N',
-                            scale=alt.Scale(domain=['Líder', 'Nuestra Empresa', 'Competidor'], range=['#FF4B4B', '#2ECC71', '#3498DB']),
+                            scale=alt.Scale(
+                                domain=['Líder', 'Nuestra Empresa', 'Competidor'],
+                                range=['#FF4B4B', '#2ECC71', '#3498DB']), # Rojo, Verde, Azul
                             legend=alt.Legend(title="Leyenda")),
+            # Usamos la columna 'orden_render' para controlar qué punto se dibuja encima
+            order=alt.Order('orden_render:Q', sort='ascending'),
             tooltip=['nombre_vendedor', 'precio']
         ).properties(height=300).interactive()
         st.altair_chart(chart, use_container_width=True)
