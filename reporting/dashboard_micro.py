@@ -297,9 +297,12 @@ if productos_disponibles:
             ])
 
             # 5. LÓGICA CLAVE: Manejo de superposición cuando somos líderes
-            # Creamos una columna para identificar si nuestra publicación es la líder del día
-            df_plot_final = pd.merge(df_plot_final, df_lider_diario.rename(columns={'precio': 'precio_lider'}), on='fecha_extraccion')
+            # Creamos un df con los precios del líder por día para hacer el merge de forma segura,
+            # seleccionando solo las columnas necesarias para no crear conflictos de nombres.
+            df_precios_lider_map = df_lider_diario[['fecha_extraccion', 'precio']].rename(columns={'precio': 'precio_lider'})
+            df_plot_final = pd.merge(df_plot_final, df_precios_lider_map, on='fecha_extraccion')
             
+            # Ahora que tenemos la columna 'serie' intacta, esta máscara funciona correctamente.
             somos_lider_mask = (df_plot_final['serie'] != 'Líder') & (df_plot_final['precio'] == df_plot_final['precio_lider'])
             df_plot_final.loc[somos_lider_mask, 'serie'] = df_plot_final['serie'] + ' (Líder)'
 
@@ -312,27 +315,23 @@ if productos_disponibles:
             df_plot_final = df_lider_diario
         
         # 6. Definimos los colores para mantener la consistencia
-        domain = ['Líder'] + [s for s in df_plot_final['serie'].unique() if 'Nuestra' in s]
-        range_ = ['#FF4B4B'] # Rojo para el líder
+        # Usamos sorted para un orden predecible en la leyenda
+        series_unicas = sorted(df_plot_final['serie'].unique())
+        domain = ['Líder'] + [s for s in series_unicas if s != 'Líder']
+        range_ = []
         for serie_name in domain:
-            if serie_name == 'Líder': continue
             if '(Líder)' in serie_name:
                 range_.append('#2ECC71') # Verde brillante si somos líderes
-            else:
-                range_.append('#00BFFF') # Otro color (ej. azul) para otras publicaciones nuestras
+            elif 'Nuestra Pub' in serie_name:
+                range_.append('#00BFFF') # Azul para nuestras otras publicaciones
+            elif serie_name == 'Líder':
+                range_.append('#FF4B4B') # Rojo para el competidor líder
 
         # 7. Creamos el gráfico con ALTAIR
         chart_tendencia = alt.Chart(df_plot_final).mark_line(point=True).encode(
-            # EJE X: Formateado para mostrar solo día/mes
             x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
-            
-            # EJE Y: El dominio NO empieza en cero, se ajusta a los datos
             y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False)),
-            
-            # COLOR: Asignado por la columna 'serie' con nuestra paleta de colores
             color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación")),
-            
-            # TOOLTIP: Muestra información útil al pasar el mouse
             tooltip=[
                 alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
                 alt.Tooltip('serie:N', title='Publicación'),
@@ -340,7 +339,7 @@ if productos_disponibles:
             ]
         ).properties(
             height=350
-        ).interactive() # Permite pan y zoom, pero con la vista inicial ya corregida
+        ).interactive()
 
         st.altair_chart(chart_tendencia, use_container_width=True)
 
