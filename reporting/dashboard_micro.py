@@ -43,13 +43,28 @@ def get_product_list(tabla_crudos: str):
 
 @st.cache_data
 def get_product_data(tabla_crudos: str, producto: str):
-    """Carga los datos de los últimos 30 días SOLO para el producto seleccionado."""
+    """
+    Carga los datos de los últimos 30 días SOLO para el producto seleccionado,
+    asegurando un único registro por publicación por día (el último).
+    """
     engine = get_engine()
-    # Parámetros para prevenir inyección SQL, aunque la data sea mía y todo eso, es una buena práctica
-    query = f"SELECT * FROM {tabla_crudos} WHERE nombre_producto = %(producto)s AND fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion DESC"
+    query = f"SELECT * FROM {tabla_crudos} WHERE nombre_producto = %(producto)s AND fecha_extraccion >= CURRENT_DATE - INTERVAL '30 days' ORDER BY fecha_extraccion ASC"
     df = pd.read_sql(query, engine, params={'producto': producto})
-    df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion']).dt.date
-    return df
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # --- LÓGICA DE AGREGACIÓN DIARIA ---
+    df['fecha_dia'] = pd.to_datetime(df['fecha_extraccion']).dt.date
+    
+    # Agrupamos por día y publicación, y nos quedamos con el ÚLTIMO registro del día.
+    columnas_originales = [col for col in df.columns if col != 'fecha_dia']
+    df_agregado = df.groupby(['fecha_dia', 'link_publicacion'])[columnas_originales].last().reset_index()
+
+    # Renombramos la columna de fecha para que coincida con el resto del script.
+    df_final = df_agregado.rename(columns={'fecha_dia': 'fecha_extraccion'})
+    
+    return df_final
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
@@ -292,9 +307,6 @@ if productos_disponibles:
         # 2. Aislamos nuestras publicaciones DENTRO DEL CONTEXTO FILTRADO
         df_nuestras_publicaciones = df_tendencia[df_tendencia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
 
-        # Preparamos el DataFrame del líder para la concatenación
-        df_lider_plot = df_lider_diario.copy()
-        df_lider_plot['serie'] = 'Líder'
 
         # 3. Verificamos si tenemos publicaciones para mostrar
         if not df_nuestras_publicaciones.empty:
@@ -309,23 +321,29 @@ if productos_disponibles:
                 df_nuestras_publicaciones[['fecha_extraccion', 'precio', 'serie']]
             ])
 
-            # 5. LÓGICA CLAVE: Manejo de superposición cuando somos líderes
+            # 5. Manejo de superposición cuando somos líderes
             # Creamos un df con los precios del líder por día para hacer el merge de forma segura,
             # seleccionando solo las columnas necesarias para no crear conflictos de nombres.
             df_precios_lider_map = df_lider_diario[['fecha_extraccion', 'precio']].rename(columns={'precio': 'precio_lider'})
             df_plot_final = pd.merge(df_plot_final, df_precios_lider_map, on='fecha_extraccion')
-            
-            # Ahora que tenemos la columna 'serie' intacta, esta máscara funciona correctamente.
+        
+            # Identificamos cuándo somos líderes, pero NO modificamos el nombre de la serie.
             somos_lider_mask = (df_plot_final['serie'] != 'Líder') & (df_plot_final['precio'] == df_plot_final['precio_lider'])
-            df_plot_final.loc[somos_lider_mask, 'serie'] = df_plot_final['serie'] + ' (Líder)'
+            
+            # Creamos una nueva columna para la FORMA del punto.
+            df_plot_final['estado_lider'] = 'Normal'
+            df_plot_final.loc[somos_lider_mask, 'estado_lider'] = 'Líder'
+            df_plot_final.loc[df_plot_final['serie'] == 'Líder', 'estado_lider'] = 'Líder'
 
-            # Removemos la línea original "Líder" en los días que una de nuestras pubs ya es marcada como líder
+            # Mantenemos la lógica para no duplicar la línea del líder.
             fechas_donde_somos_lider = df_plot_final[somos_lider_mask]['fecha_extraccion'].unique()
             df_plot_final = df_plot_final[~((df_plot_final['serie'] == 'Líder') & (df_plot_final['fecha_extraccion'].isin(fechas_donde_somos_lider)))]
 
         else:
+            df_plot_final = df_lider_diario.copy()
             # Si no tenemos publicaciones, el DataFrame final solo contiene al líder
-            df_plot_final = df_lider_diario
+            df_plot_final['estado_lider'] = 'Líder'
+
         
         # 6. Definimos los colores para mantener la consistencia
         # Usamos sorted para un orden predecible en la leyenda
@@ -333,26 +351,24 @@ if productos_disponibles:
         domain = ['Líder'] + [s for s in series_unicas if s != 'Líder']
         range_ = []
         for serie_name in domain:
-            if '(Líder)' in serie_name:
-                range_.append('#2ECC71') # Verde brillante si somos líderes
-            elif 'Nuestra Pub' in serie_name:
-                range_.append('#2ECC71') # Verde para nuestras publicaciones
-            elif serie_name == 'Líder':
-                range_.append('#FF4B4B') # Rojo para el competidor líder
+            if serie_name == 'Líder':
+                range_.append('#FF4B4B') # Rojo para el Líder
+            else: # Todas nuestras publicaciones
+                range_.append('#2ECC71') # Verde para Nuestra Empresa
 
         # 7. Creamos el gráfico con ALTAIR
-        chart_tendencia = alt.Chart(df_plot_final).mark_line(point=True).encode(
+        chart_tendencia = alt.Chart(df_plot_final).mark_line(point=alt.OverlayMarkDef()).encode(
             x=alt.X('fecha_extraccion:T', title='Fecha', axis=alt.Axis(format='%d/%m')),
             y=alt.Y('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(zero=False)),
-            color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación")),
+            color=alt.Color('serie:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Publicación (contexto)")),
+            shape=alt.Shape('estado_lider:N', scale=alt.Scale(domain=['Líder', 'Normal'], range=['star', 'circle']), title="Estado"),
             tooltip=[
                 alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'),
                 alt.Tooltip('serie:N', title='Publicación'),
-                alt.Tooltip('precio:Q', title='Precio', format='$,.2f')
+                alt.Tooltip('precio:Q', title='Precio', format='$,.2f'),
+                alt.Tooltip('estado_lider:N', title='Estado')
             ]
-        ).properties(
-            height=350
-        ).interactive()
+        ).properties( height=350).interactive()
 
         st.altair_chart(chart_tendencia, use_container_width=True)
 
