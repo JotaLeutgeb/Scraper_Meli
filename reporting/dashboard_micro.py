@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
 from urllib.parse import quote_plus
-from google import genai
+import google.generativeai as genai
 
 # -----------------------------------------------------------------------------
 # FUNCIONES DE CONEXIÓN Y CARGA DE DATOS
