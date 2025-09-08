@@ -303,7 +303,7 @@ if productos_disponibles:
 
         # 4. Asignar un nombre de serie a cada grupo de datos
         df_nuestro['serie'] = 'Nuestra Empresa'
-        df_lider_diario['serie'] = 'Líder del Mercado'
+        df_lider_diario['serie'] = df_lider_diario['nombre_vendedor']
         df_competidores = df_tendencia[df_tendencia['nombre_vendedor'].isin(vendedores_relevantes)].copy()
         df_competidores['serie'] = df_competidores['nombre_vendedor']
 
@@ -322,10 +322,21 @@ if productos_disponibles:
             )
 
             # 7. GRAFICAR CON st.line_chart (Simple y directo)
-            st.info("Mostrando su empresa, el líder del mercado y los competidores con precio inferior al suyo.")
-            st.line_chart(df_para_grafico)
+            cols = df_para_grafico.columns.tolist()
+            if 'Nuestra Empresa' in cols:
+                cols.insert(0, cols.pop(cols.index('Nuestra Empresa')))
+                df_para_grafico = df_para_grafico[cols]
+                # Definir la lista de colores con el verde al principio
+                colores = ['#2ECC71'] + ['#FF4B4B', '#3498DB', '#9B59B6', '#E67E22']
+            
+            st.info("Mostrando su empresa, el líder del día y los competidores con precio inferior al suyo.")
+            st.line_chart(df_para_grafico, color=colores)
+            
         else:
             st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
+    else:
+        st.info("No hay suficientes datos históricos para mostrar una tendencia.")
+
 
     # --- TABLA DE DATOS DETALLADA ---
     with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
