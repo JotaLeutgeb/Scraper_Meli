@@ -123,7 +123,7 @@ st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para exp
 
 productos_disponibles = get_product_list(TABLA_CRUDOS)
 
-if not productos_disponibles.empty:
+if productos_disponibles.empty:
     st.sidebar.header("Filtros Principales")
     producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
     df_producto = get_product_data(TABLA_CRUDOS, producto_seleccionado)
