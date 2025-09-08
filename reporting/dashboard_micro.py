@@ -54,28 +54,31 @@ def get_product_data(tabla_crudos: str, producto: str):
     if df.empty:
         return pd.DataFrame()
 
-    # --- LÓGICA DE VALIDACIÓN Y LIMPIEZA DE FECHAS (NUEVO) ---
-    # 1. Convertimos la columna a datetime. 'coerce' transformará errores/nulos en NaT (Not a Time).
+    # --- LÓGICA DE VALIDACIÓN Y LIMPIEZA DE FECHAS ---
     df['fecha_extraccion'] = pd.to_datetime(df['fecha_extraccion'], errors='coerce')
-    
-    # 2. Eliminamos cualquier fila que tenga NaT en la columna de fecha.
     df.dropna(subset=['fecha_extraccion'], inplace=True)
     
-    # Si después de limpiar no quedan datos, devolvemos un DataFrame vacío.
     if df.empty:
         return pd.DataFrame()
 
-    # --- LÓGICA DE AGREGACIÓN DIARIA ---
+    # --- LÓGICA DE AGREGACIÓN DIARIA (CORREGIDA) ---
+    # 1. Creamos la columna solo con la fecha.
     df['fecha_dia'] = df['fecha_extraccion'].dt.date
     
+    # 2. *** LA CORRECCIÓN CLAVE: Eliminamos la columna original para evitar duplicados. ***
+    df = df.drop(columns=['fecha_extraccion'])
+    
+    # 3. Procedemos con la agrupación como antes.
     grouping_keys = ['fecha_dia', 'link_publicacion']
     agg_cols = [col for col in df.columns if col not in grouping_keys]
     
     df_agregado = df.groupby(grouping_keys)[agg_cols].last().reset_index()
 
+    # 4. Renombramos la columna de fecha para que coincida con el resto del script.
     df_final = df_agregado.rename(columns={'fecha_dia': 'fecha_extraccion'})
     
     return df_final
+
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
