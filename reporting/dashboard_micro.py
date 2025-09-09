@@ -191,7 +191,7 @@ def obtener_sugerencia_ia(contexto: dict):
     """Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google."""
     try:
         genai.configure(api_key=st.secrets.google_ai["api_key"])
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-pro')
     except Exception as e:
         return f"Error al configurar la API de IA: {e}."
 
@@ -272,6 +272,11 @@ def run_dashboard():
     # --- Toda la lógica y la interfaz de Streamlit deben estar DENTRO de esta función ---
     
     st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
+
+    # Inicializar la variable de estado para la sugerencia de IA
+    if 'sugerencia_ia' not in st.session_state:
+        st.session_state.sugerencia_ia = None
+    
     st.title("Análisis Táctico con Asistente IA")
 
     try:
@@ -425,24 +430,25 @@ def run_dashboard():
         # --- ANÁLISIS CON IA ---
         st.subheader("Recomendaciones Estratégicas con IA")
         if not df_contexto_display.empty or kpis['posicion_str'] in ["Fuera de Filtro", "N/A"]:
-            with st.spinner("El Oráculo está analizando la rentabilidad y los trade-offs..."):
-                pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
-                
-                # Crear el diccionario de contexto para la IA
-                contexto_ia = {
-                    "producto": producto_seleccionado,
-                    "nuestro_seller": NUESTRO_SELLER_NAME,
-                    "nuestro_precio": nuestro_precio_display,
-                    "posicion": kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'],
-                    "nombre_lider": kpis['nombre_lider'],
-                    "precio_lider": kpis['precio_lider'],
-                    "competidores_contexto": kpis['cant_total'],
-                    "total_competidores": len(df_dia),
-                    "pct_full": pct_full_contexto
-                }
-                
-                sugerencia = obtener_sugerencia_ia(contexto_ia)
-                st.markdown(sugerencia)
+            if st.button("🧠 Analizar Escenario con IA Pro"):
+                with st.spinner("Contactando al estratega IA Pro... Este análisis puede tardar unos segundos..."):
+                    pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
+
+                    # Crear el diccionario de contexto para la IA
+                    contexto_ia = {
+                        "producto": producto_seleccionado,
+                        "nuestro_seller": NUESTRO_SELLER_NAME,
+                        "nuestro_precio": nuestro_precio_display,
+                        "posicion": kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'],
+                        "nombre_lider": kpis['nombre_lider'],
+                        "precio_lider": kpis['precio_lider'],
+                        "competidores_contexto": kpis['cant_total'],
+                        "total_competidores": len(df_dia),
+                        "pct_full": pct_full_contexto
+                    }
+                    
+                    sugerencia = obtener_sugerencia_ia(contexto_ia)
+                    st.markdown(sugerencia)
         else:
             st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
 
