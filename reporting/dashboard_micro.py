@@ -21,7 +21,7 @@ def run_dashboard():
 
     try:
         config_cliente = st.secrets["client_config"]
-        TABLA_CRUDOS = config_cliente['tabla_crudos']
+        tabla_crudos = config_cliente['tabla_crudos']
         NUESTRO_SELLER_NAME = config_cliente['seller_name']
     except Exception as e:
         st.error(f"Error: No se encontró la 'client_config' en los secretos. Detalles: {e}")
