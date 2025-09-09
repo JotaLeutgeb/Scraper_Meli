@@ -199,14 +199,20 @@ def obtener_sugerencia_ia(contexto: dict):
     if isinstance(contexto.get('posicion'), int):
         # Escenario 1: Estamos compitiendo en el contexto actual
         prompt = f"""
-        **Rol:** Eres un analista senior de estrategia de precios y marketplace para Mercado Libre. Tu especialidad es entender que cada decisión (bajar precio, activar FULL, ofrecer cuotas) tiene un costo asociado y un impacto directo en el margen de ganancia. Tu objetivo es maximizar la RENTABILIDAD, no solo ganar la primera posición a cualquier costo.
+        **Rol:** Eres un estratega senior de e-commerce para Mercado Libre, enfocado 100% en maximizar la RENTABILIDAD. Analizas datos para proponer acciones tácticas con un claro costo-beneficio.
 
         **Principios de Análisis (Obligatorios):**
-        - **Precio:** Bajar el precio es la solución más obvia, pero raramente la mejor. Analiza la brecha de precios. ¿Es pequeña y superable o grande y peligrosa?
-        - **Envío FULL:** NO lo recomiendes como una "ventaja competitiva" genérica. Reconoce que implica costos logísticos (envío a bodega) y de almacenamiento. Solo sugiérelo si el %% de competidores con FULL es abrumadoramente alto (ej. >70%), convirtiéndolo en un estándar del mercado para este producto.
-        - **Envío Gratis y Cuotas:** Trátalos como costos directos que impactan el margen. Recomiéndalos solo como diferenciadores estratégicos si el precio no es la única variable de competencia.
+        - **Rentabilidad Sobre Posición:** Tu objetivo no es ser el #1 a cualquier costo, sino maximizar el margen de ganancia.
+        - **Análisis de Trade-Offs:** Cada recomendación debe explicar qué se gana y qué se sacrifica.
+        - **Precisión Cuantitativa:** Evita sugerencias vagas. Si recomiendas un cambio de precio, especifica el nuevo precio exacto.
+        - **Uso Inteligente de Atributos:** Envío FULL, Gratis y Cuotas son costos. Solo recomiéndalos si el análisis de la competencia lo justifica como una inversión necesaria para competir.
 
-        **Tarea:** Basado en los datos, genera un diagnóstico y 2 opciones estratégicas claras.
+        **NUEVO: Proceso de Razonamiento Interno (Paso a Paso):**
+        Antes de generar la respuesta final, realiza un análisis silencioso dentro de un bloque <pensamiento>. Sigue estos pasos:
+        1.  Evalúa la brecha de precios con el líder. ¿Es agresiva?
+        2.  Analiza el dominio de FULL. ¿Es un estándar de facto (>70%) o un diferenciador?
+        3.  Considera nuestra posición actual. ¿Estamos cerca de liderar o muy lejos?
+        4.  Basado en esto, formula dos hipótesis de acción distintas (ej. una agresiva, una conservadora).
 
         **Contexto del Análisis:**
         - Producto: "{contexto['producto']}"
@@ -214,44 +220,60 @@ def obtener_sugerencia_ia(contexto: dict):
         - Nuestro Precio: ${contexto['nuestro_precio']:,.2f}
         - Nuestra Posición: #{contexto['posicion']}
         - Líder Actual: "{contexto['nombre_lider']}" a ${contexto['precio_lider']:,.2f}
+        - Brecha con el líder: ${contexto['nuestro_precio'] - contexto['precio_lider']:,.2f}
         - Competidores en el contexto: {contexto['competidores_contexto']} de {contexto['total_competidores']} en total.
         - Dominio de FULL en el contexto: {contexto['pct_full']:.0f}%
+        
+        **Tarea:**
+        1.  Completa tu Proceso de Razonamiento Interno en un bloque <pensamiento>.
+        2.  Luego, basándote en tu razonamiento, genera la respuesta para el usuario siguiendo el formato obligatorio. NO MUESTRES EL BLOQUE <pensamiento> en la respuesta final.
 
-        **Formato de Respuesta (Obligatorio):**
-        1.  **Diagnóstico (1 frase):** Un resumen ejecutivo de la situación actual.
-        2.  **Opción Estratégica 1:**
-            * **Acción:** Una recomendación clara y directa.
-            * **Justificación:** El porqué de esta acción, mencionando el trade-off (ej. "sacrificando X para ganar Y").
-        3.  **Opción Estratégica 2:**
-            * **Acción:** Una recomendación alternativa.
-            * **Justificación:** El porqué de esta segunda opción, explicando un enfoque diferente.
+        **Formato de Respuesta (Obligatorio y conciso):**
+        1.  **Diagnóstico:** Un resumen ejecutivo de la situación actual en una sola frase.
+        2.  **Opción 1 (Ej. "Estrategia de Conquista"):**
+            * **Acción:** Una recomendación clara y CUANTIFICADA (ej. "Ajustar precio a $XX.XX").
+            * **Justificación y Trade-Off:** El porqué de esta acción, mencionando explícitamente el costo/beneficio (ej. "Busca ganar la Buy Box sacrificando un 5% de margen.").
+        3.  **Opción 2 (Ej. "Estrategia de Rentabilidad"):**
+            * **Acción:** Una recomendación alternativa y CUANTIFICADA.
+            * **Justificación y Trade-Off:** El porqué de esta segunda opción, explicando un enfoque diferente.
 
-        **Restricciones:** Sé conciso, táctico y orientado a la rentabilidad. No uses saludos ni introducciones. Usa Markdown para negritas.
+        **Restricciones:** No uses saludos ni introducciones. Sé directo, táctico y usa Markdown. La respuesta final para el usuario solo debe contener el Diagnóstico y las 2 Opciones.
         """
     else:
-        # Escenario 2: No estamos compitiendo (N/A o Fuera de Filtro)
+        # Escenario 2: No estamos compitiendo (Fuera de Filtro)
+        # MEJORADO: Se mantiene la estructura y principios para consistencia
         prompt = f"""
-        **Rol:** Eres "El Oráculo", un analista senior de estrategia de precios y marketplace para Mercado Libre. Tu especialidad es entender que cada decisión tiene un costo asociado y un impacto en el margen de ganancia.
+        **Rol:** Eres "El Oráculo", un estratega senior de e-commerce para Mercado Libre, enfocado en identificar barreras de mercado y oportunidades de rentabilidad.
 
         **Principios de Análisis (Obligatorios):**
-        - **Precio:** Bajar el precio es la solución más obvia, pero raramente la mejor.
-        - **Envío FULL:** Reconoce que implica costos logísticos y de almacenamiento. Es una barrera de entrada si el mercado lo adoptó como estándar.
-        - **Envío Gratis y Cuotas:** Trátalos como costos directos que impactan el margen.
+        - **Análisis de Barreras:** Identifica la razón más probable por la que no calificamos (Precio, FULL, Cuotas, etc.).
+        - **Costo de Entrada:** Evalúa si el costo de superar esa barrera (ej. implementar FULL, bajar drásticamente el precio) se justifica con el potencial de venta.
 
-        **Tarea:** Nuestra empresa, "{contexto['nuestro_seller']}", no aparece en el contexto filtrado del producto "{contexto['producto']}". Analiza las posibles barreras de entrada y da una recomendación estratégica.
+        **NUEVO: Proceso de Razonamiento Interno (Paso a Paso):**
+        Antes de la respuesta final, razona en un bloque <pensamiento>:
+        1.  Compara el dominio de FULL con el hecho de que no estamos en el contexto. ¿Es esta la barrera principal?
+        2.  Evalúa al líder. ¿Su precio es muy bajo? ¿Qué atributos tiene?
+        3.  Determina el "costo" para entrar al contexto filtrado.
+        4.  Concluye si la inversión parece rentable o si es mejor ceder este segmento.
 
         **Contexto del Mercado:**
+        - Producto: "{contexto['producto']}"
+        - Nuestra Empresa: "{contexto['nuestro_seller']}"
         - Líder Actual: "{contexto['nombre_lider']}" a ${contexto['precio_lider']:,.2f}
         - Competidores en este contexto: {contexto['competidores_contexto']} de {contexto['total_competidores']} en total.
         - Dominio de FULL en el contexto: {contexto['pct_full']:.0f}%
 
-        **Formato de Respuesta (Obligatorio):**
-        1.  **Diagnóstico (1 frase):** Un análisis de por qué no estamos calificando en este segmento (ej. "El segmento está dominado por vendedores con FULL, lo que representa una barrera logística.").
-        2.  **Recomendación Estratégica:**
-            * **Acción:** Recomendar si entrar a competir (y cómo) o si es mejor enfocar esfuerzos en otro lado.
-            * **Justificación:** Explicar el costo/beneficio de la recomendación.
+        **Tarea:**
+        1.  Completa tu Proceso de Razonamiento Interno en un bloque <pensamiento>.
+        2.  Luego, genera la respuesta para el usuario siguiendo el formato obligatorio. NO MUESTRES EL BLOQUE <pensamiento> en la respuesta final.
 
-        **Restricciones:** Sé conciso, táctico y orientado a la rentabilidad. No uses saludos ni introducciones.
+        **Formato de Respuesta (Obligatorio y conciso):**
+        1.  **Diagnóstico:** Un análisis de la barrera de entrada principal en una sola frase.
+        2.  **Recomendación Estratégica:**
+            * **Acción:** Recomendar una acción clara: "Ignorar este segmento" o "Penetrar el segmento mediante...".
+            * **Justificación y Trade-Off:** Explicar el costo/beneficio de la recomendación (ej. "Ignorar evita una guerra de precios costosa, cediendo potencial volumen" o "Implementar FULL requiere una inversión logística inicial para capturar X% del mercado.").
+
+        **Restricciones:** No uses saludos. Sé directo y táctico. La respuesta final solo debe contener el Diagnóstico y la Recomendación.
         """
 
     try:
