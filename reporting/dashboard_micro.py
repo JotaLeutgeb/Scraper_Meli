@@ -92,76 +92,81 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
 
 def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
     """
-    Prepara el DataFrame para el gráfico de tendencias bajo reglas de negocio estrictas.
-
-    La lógica se centra en el estado del mercado en el día más reciente para
-    determinar qué historiales mostrar.
-
-    Reglas de Visualización:
+    Prepara el DataFrame para el gráfico de tendencias con saneamiento de datos
+    y un bloque de depuración opcional.
+    
+    Reglas de Visualización Estrictas:
     1. SIEMPRE se muestra la serie de precios de nuestra empresa.
-    2. SE MUESTRA el historial completo de cualquier competidor cuyo precio en el
-       día más reciente es ESTRICTAMENTE INFERIOR al nuestro.
+    2. SE MUESTRA el historial de cualquier competidor cuyo precio en el día más
+       reciente es ESTRICTAMENTE INFERIOR al nuestro.
     3. SE EXCLUYE a cualquier competidor cuyo precio en el día más reciente es
-       superior o igual al nuestro, independientemente de su historial pasado.
-
-    Args:
-        df_hist (pd.DataFrame): DataFrame con los datos históricos de los últimos 15 días.
-        nuestro_seller (str): El nombre de nuestra empresa/vendedor.
-
-    Returns:
-        tuple[pd.DataFrame | None, list[str] | None]:
-            - Un DataFrame pivotado listo para ser usado con Altair/Streamlit.
-            - Una lista de colores correspondiente a las columnas del DataFrame.
+       superior o igual al nuestro, independientemente de su historial.
     """
     if df_hist.empty:
         return None, None
 
-    # --- PASO 1: Determinar el contexto del día más reciente ("hoy") ---
-    fecha_maxima = df_hist['fecha_extraccion'].max()
-    df_hoy = df_hist[df_hist['fecha_extraccion'] == fecha_maxima]
+    # --- PASO 0: SANEAMIENTO Y DEPURACIÓN DE DATOS ---
+    # Forzamos la columna 'precio' a ser numérica. 'coerce' convierte los
+    # valores no numéricos en NaN (Not a Number). Esta es la causa más
+    # probable de bugs de comparación.
+    df_hist_clean = df_hist.copy()
+    df_hist_clean['precio'] = pd.to_numeric(df_hist_clean['precio'], errors='coerce')
+    
+    # Eliminamos cualquier fila donde el precio no sea válido (NaN)
+    df_hist_clean.dropna(subset=['precio'], inplace=True)
 
+    # --- PASO 1: Determinar el contexto del día más reciente ("hoy") ---
+    if df_hist_clean.empty:
+        return None, None
+    fecha_maxima = df_hist_clean['fecha_extraccion'].max()
+    df_hoy = df_hist_clean[df_hist_clean['fecha_extraccion'] == fecha_maxima]
     nuestra_oferta_hoy = df_hoy[df_hoy['nombre_vendedor'] == nuestro_seller]
 
-    # Si no tenemos datos hoy, no podemos hacer comparaciones. Mostramos solo nuestra historia.
+    # --- BLOQUE DE DEPURACIÓN (Descomentar las líneas de abajo para activar) ---
+    # import sys
+    # print("\n--- INICIO DEPURACIÓN: preparar_datos_tendencia ---", file=sys.stderr)
+    # print(f"Fecha de análisis (hoy): {fecha_maxima}", file=sys.stderr)
+    # print("\nTabla de precios de HOY (ordenada por precio):", file=sys.stderr)
+    # print(df_hoy[['nombre_vendedor', 'precio']].sort_values('precio').to_string(), file=sys.stderr)
+    # print("---", file=sys.stderr)
+    # --- FIN BLOQUE DEPURACIÓN ---
+
     if nuestra_oferta_hoy.empty:
-        df_solo_nosotros = df_hist[df_hist['nombre_vendedor'] == nuestro_seller]
-        if df_solo_nosotros.empty:
-            return None, None
+        # print(f"AVISO: No se encontró oferta para '{nuestro_seller}' en la fecha más reciente.", file=sys.stderr)
+        df_solo_nosotros = df_hist_clean[df_hist_clean['nombre_vendedor'] == nuestro_seller]
+        if df_solo_nosotros.empty: return None, None
         df_para_grafico = df_solo_nosotros.pivot_table(index='fecha_extraccion', columns='nombre_vendedor', values='precio')
-        return df_para_grafico, ['#2ECC71'] # Verde para nosotros
+        return df_para_grafico, ['#2ECC71']
 
     nuestro_precio_hoy = nuestra_oferta_hoy['precio'].iloc[0]
 
     # --- PASO 2: Crear la lista definitiva de vendedores a mostrar ---
-    # Esta es la implementación directa de tus 2 reglas.
-    
     vendedores_a_mostrar = set()
-    
-    # Regla 1 (implícita): Siempre nos mostramos a nosotros
     vendedores_a_mostrar.add(nuestro_seller)
-
-    # Regla 1 (explícita): Identificar competidores con precio inferior HOY
+    
     competidores_amenaza = df_hoy[df_hoy['precio'] < nuestro_precio_hoy]
     vendedores_a_mostrar.update(competidores_amenaza['nombre_vendedor'].unique())
-    
-    # La Regla 2 (exclusión) se cumple automáticamente al no añadir a nadie más.
+
+    # --- BLOQUE DE DEPURACIÓN (Descomentar las líneas de abajo para activar) ---
+    # print(f"Nuestro precio de referencia ({nuestro_seller}): ${nuestro_precio_hoy:,.2f}", file=sys.stderr)
+    # print("\nCompetidores con precio < al nuestro HOY:", file=sys.stderr)
+    # print(competidores_amenaza[['nombre_vendedor', 'precio']].sort_values('precio').to_string(), file=sys.stderr)
+    # print(f"\nLista FINAL de vendedores para el gráfico: {list(vendedores_a_mostrar)}", file=sys.stderr)
+    # print("--- FIN DEPURACIÓN ---\n", file=sys.stderr)
+    # --- FIN BLOQUE DEPURACIÓN ---
 
     # --- PASO 3: Construir el DataFrame y los colores con la lista definitiva ---
-    
-    # Filtrar el dataframe histórico COMPLETO usando nuestra lista final
-    df_largo = df_hist[df_hist['nombre_vendedor'].isin(list(vendedores_a_mostrar))].copy()
+    df_largo = df_hist_clean[df_hist_clean['nombre_vendedor'].isin(list(vendedores_a_mostrar))].copy()
 
     if df_largo.empty:
         return None, None
 
-    # Pivotar la tabla para el gráfico
     df_para_grafico = df_largo.pivot_table(
         index='fecha_extraccion',
         columns='nombre_vendedor',
         values='precio'
     )
 
-    # Lógica de colores (igual que antes, pero aplicada a la nueva tabla)
     cols = df_para_grafico.columns.tolist()
     if nuestro_seller in cols:
         cols.insert(0, cols.pop(cols.index(nuestro_seller)))
