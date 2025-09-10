@@ -207,7 +207,7 @@ def obtener_sugerencia_ia(contexto: dict):
         - **Precisión Cuantitativa:** Evita sugerencias vagas. Si recomiendas un cambio de precio, especifica el nuevo precio exacto.
         - **Uso Inteligente de Atributos:** Envío FULL, Gratis y Cuotas son costos. Solo recomiéndalos si el análisis de la competencia lo justifica como una inversión necesaria para competir.
 
-        **NUEVO: Proceso de Razonamiento Interno (Paso a Paso):**
+        **Proceso de Razonamiento Interno (Paso a Paso):**
         Antes de generar la respuesta final, realiza un análisis silencioso dentro de un bloque <pensamiento>. Sigue estos pasos:
         1.  Evalúa la brecha de precios con el líder. ¿Es agresiva?
         2.  Analiza el dominio de FULL. ¿Es un estándar de facto (>70%) o un diferenciador?
@@ -433,20 +433,49 @@ def run_dashboard():
         st.markdown("---")
         
         # --- Gráfico de Tendencia ---
+        # --- Gráfico de Tendencia ---
         st.subheader("Evolución de Precios (Últimos 15 días)")
         df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
 
         if not df_tendencia.empty:
-            # Llamada a la nueva función encapsulada
             df_grafico_tendencia, colores_tendencia = preparar_datos_tendencia(df_tendencia, NUESTRO_SELLER_NAME)
-            
+
             if df_grafico_tendencia is not None and not df_grafico_tendencia.empty:
-                st.info("Mostrando su empresa, el líder del día y los competidores con precio inferior al suyo.")
-                st.line_chart(df_grafico_tendencia, color=colores_tendencia)
+                st.info("Mostrando su empresa, el líder del día y los competidores con precio inferior al suyo. Puede hacer zoom vertical en el gráfico.")
+
+                # 1. Reformatear datos para Altair (formato "largo")
+                df_altair = df_grafico_tendencia.reset_index().melt('fecha_extraccion', var_name='serie', value_name='precio').dropna()
+
+                # 2. Construir el gráfico base con líneas y puntos
+                base = alt.Chart(df_altair).mark_line(point=True).encode(
+                    x=alt.X('fecha_extraccion:T', axis=alt.Axis(format='%d/%m', title='Fecha', labelAngle=0), title='Fecha'),
+                    y=alt.Y('precio:Q', axis=alt.Axis(format='$,.0f'), title='Precio'),
+                    color=alt.Color('serie:N',
+                                    scale=alt.Scale(domain=df_grafico_tendencia.columns.tolist(), range=colores_tendencia),
+                                    legend=alt.Legend(title="Vendedor")),
+                    tooltip=[
+                        alt.Tooltip('serie', title='Vendedor'),
+                        alt.Tooltip('fecha_extraccion', title='Fecha', format='%d/%m/%Y'),
+                        alt.Tooltip('precio', title='Precio', format='$,.2f')
+                    ]
+                )
+
+                # 3. Configurar interactividad para zoom SOLO en el eje Y
+                zoom = alt.selection_interval(bind='scales', encodings=['y'])
+
+                # 4. Crear el gráfico final y añadir la selección
+                chart = base.add_params(
+                    zoom
+                ).properties(
+                    height=400
+                ).interactive()
+
+                st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
         else:
             st.info("No hay suficientes datos históricos para mostrar una tendencia.")
+
 
 
         # --- ANÁLISIS CON IA ---
