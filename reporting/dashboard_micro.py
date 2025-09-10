@@ -123,12 +123,12 @@ def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
     nuestra_oferta_hoy = df_hoy[df_hoy['nombre_vendedor'] == nuestro_seller]
 
     # --- BLOQUE DE DEPURACIÓN (Descomentar las líneas de abajo para activar) ---
-    # import sys
-    # print("\n--- INICIO DEPURACIÓN: preparar_datos_tendencia ---", file=sys.stderr)
-    # print(f"Fecha de análisis (hoy): {fecha_maxima}", file=sys.stderr)
-    # print("\nTabla de precios de HOY (ordenada por precio):", file=sys.stderr)
-    # print(df_hoy[['nombre_vendedor', 'precio']].sort_values('precio').to_string(), file=sys.stderr)
-    # print("---", file=sys.stderr)
+    import sys
+    print("\n--- INICIO DEPURACIÓN: preparar_datos_tendencia ---", file=sys.stderr)
+    print(f"Fecha de análisis (hoy): {fecha_maxima}", file=sys.stderr)
+    print("\nTabla de precios de HOY (ordenada por precio):", file=sys.stderr)
+    print(df_hoy[['nombre_vendedor', 'precio']].sort_values('precio').to_string(), file=sys.stderr)
+    print("---", file=sys.stderr)
     # --- FIN BLOQUE DEPURACIÓN ---
 
     if nuestra_oferta_hoy.empty:
@@ -148,11 +148,11 @@ def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
     vendedores_a_mostrar.update(competidores_amenaza['nombre_vendedor'].unique())
 
     # --- BLOQUE DE DEPURACIÓN (Descomentar las líneas de abajo para activar) ---
-    # print(f"Nuestro precio de referencia ({nuestro_seller}): ${nuestro_precio_hoy:,.2f}", file=sys.stderr)
-    # print("\nCompetidores con precio < al nuestro HOY:", file=sys.stderr)
-    # print(competidores_amenaza[['nombre_vendedor', 'precio']].sort_values('precio').to_string(), file=sys.stderr)
-    # print(f"\nLista FINAL de vendedores para el gráfico: {list(vendedores_a_mostrar)}", file=sys.stderr)
-    # print("--- FIN DEPURACIÓN ---\n", file=sys.stderr)
+    print(f"Nuestro precio de referencia ({nuestro_seller}): ${nuestro_precio_hoy:,.2f}", file=sys.stderr)
+    print("\nCompetidores con precio < al nuestro HOY:", file=sys.stderr)
+    print(competidores_amenaza[['nombre_vendedor', 'precio']].sort_values('precio').to_string(), file=sys.stderr)
+    print(f"\nLista FINAL de vendedores para el gráfico: {list(vendedores_a_mostrar)}", file=sys.stderr)
+    print("--- FIN DEPURACIÓN ---\n", file=sys.stderr)
     # --- FIN BLOQUE DEPURACIÓN ---
 
     # --- PASO 3: Construir el DataFrame y los colores con la lista definitiva ---
