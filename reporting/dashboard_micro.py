@@ -92,54 +92,95 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
 
 def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
     """
-    Prepara el DataFrame para el gráfico de tendencias.
+    Prepara el DataFrame para el gráfico de tendencias de forma robusta.
 
-    Esta función aísla la lógica de negocio para identificar las series de
-    datos más relevantes para el análisis histórico:
-    1. La serie de precios de nuestra empresa.
-    2. La serie de precios del líder de cada día.
-    3. Las series de precios de competidores que hoy son más baratos que nosotros.
+    Esta función aísla la lógica para identificar las series de datos más
+    relevantes para el análisis histórico y garantiza que se muestre el
+    historial completo de cualquier competidor relevante.
 
-    Además, genera una paleta de colores dinámica que siempre asigna un color
-    consistente (verde) a nuestra empresa.
+    Vendedores Relevantes son:
+    1. Nuestra propia empresa.
+    2. Cualquier vendedor que fue líder de precio en cualquier día del período.
+    3. Cualquier vendedor cuyo precio en el día más reciente es inferior al nuestro.
 
     Args:
-        df_hist (pd.DataFrame): DataFrame con los datos históricos de los últimos
-                                15 días para un producto específico.
+        df_hist (pd.DataFrame): DataFrame con los datos históricos de los últimos 15 días.
         nuestro_seller (str): El nombre de nuestra empresa/vendedor.
 
     Returns:
-        tuple[pd.DataFrame, list[str] | None]:
-            - Un DataFrame pivotado listo para ser usado en st.line_chart.
-            - Una lista de colores correspondiente a las columnas del DataFrame,
-              o None si no hay datos para graficar.
+        tuple[pd.DataFrame | None, list[str] | None]:
+            - Un DataFrame pivotado listo para ser usado con Altair/Streamlit.
+            - Una lista de colores correspondiente a las columnas del DataFrame.
     """
-    # --- 1. LÓGICA DE NEGOCIO PARA FILTRAR SERIES RELEVANTES ---
-    
-    # Identificar nuestra propia serie de datos y nuestro precio más reciente
-    df_nuestro = df_hist[df_hist['nombre_vendedor'] == nuestro_seller].copy()
-    nuestro_precio_actual = 0
-    if not df_nuestro.empty:
-        fecha_mas_reciente_nuestra = df_nuestro['fecha_extraccion'].max()
-        nuestro_precio_actual = df_nuestro[df_nuestro['fecha_extraccion'] == fecha_mas_reciente_nuestra]['precio'].iloc[0]
+    if df_hist.empty:
+        return None, None
 
-    # Identificar al líder de cada día en el período histórico
-    df_lider_diario = df_hist.loc[df_hist.groupby('fecha_extraccion')['precio'].idxmin()].copy()
-    
-    # Identificar competidores relevantes (aquellos con precio inferior al nuestro en el día más reciente)
+    # --- 1. Identificar a todos los vendedores relevantes en una lista única ---
+
+    vendedores_relevantes = set()
+
+    # Añadir siempre a nuestra empresa
+    vendedores_relevantes.add(nuestro_seller)
+
+    # todos los que fueron líderes de precio en algún momento
+    lideres_diarios = df_hist.loc[df_hist.groupby('fecha_extraccion')['precio'].idxmin()]
+    vendedores_relevantes.update(lideres_diarios['nombre_vendedor'].unique())
+
+    #  competidores que HOY son más baratos que nosotros
     fecha_maxima = df_hist['fecha_extraccion'].max()
-    df_hoy = df_hist[df_hist['fecha_extraccion'] == fecha_maxima].sort_values('precio').reset_index()
+    df_hoy = df_hist[df_hist['fecha_extraccion'] == fecha_maxima]
     
-    vendedores_relevantes = []
-    if nuestro_precio_actual > 0 and not df_hoy.empty:
-        lider_hoy = df_hoy.iloc[0]['nombre_vendedor']
-        if lider_hoy == nuestro_seller:
-            # Si somos el líder, el competidor relevante es el que nos sigue
-            if len(df_hoy) > 1:
-                vendedores_relevantes.append(df_hoy.iloc[1]['nombre_vendedor'])
+    nuestra_oferta_hoy = df_hoy[df_hoy['nombre_vendedor'] == nuestro_seller]
+    if not nuestra_oferta_hoy.empty:
+        nuestro_precio_hoy = nuestra_oferta_hoy['precio'].iloc[0]
+        competidores_mas_baratos_hoy = df_hoy[df_hoy['precio'] < nuestro_precio_hoy]
+        vendedores_relevantes.update(competidores_mas_baratos_hoy['nombre_vendedor'].unique())
+
+    # --- 2. Construir el DataFrame final con el historial completo ---
+
+    # Filtrar el dataframe histórico para incluir solo a los vendedores relevantes
+    df_largo = df_hist[df_hist['nombre_vendedor'].isin(list(vendedores_relevantes))].copy()
+
+    if df_largo.empty:
+        return None, None
+
+    # Pivotar la tabla para tener fechas como índice y vendedores como columnas
+    df_para_grafico = df_largo.pivot_table(
+        index='fecha_extraccion',
+        columns='nombre_vendedor',
+        values='precio'
+    )
+
+    # --- 3. Lógica de colores dinámica y robusta ---
+
+    cols = df_para_grafico.columns.tolist()
+
+    # Asegurarnos de que nuestra empresa esté en la lista y ponerla al principio
+    if nuestro_seller in cols:
+        cols.insert(0, cols.pop(cols.index(nuestro_seller)))
+        df_para_grafico = df_para_grafico[cols]
+    
+    # Generar la paleta de colores, asignando siempre verde a nuestra empresa
+    paleta_competidores = ['#FF4B4B', '#3498DB', '#9B59B6', '#E67E22', '#F1C40F']
+    colores = []
+    
+    for vendedor in cols:
+        if vendedor == nuestro_seller:
+            colores.append('#2ECC71')
         else:
-            # Si no somos el líder, los relevantes son todos los que están por debajo de nuestro precio
-            vendedores_relevantes = df_hoy[df_hoy['precio'] < nuestro_precio_actual]['nombre_vendedor'].unique().tolist()
+            # Asignar colores de la paleta al resto, ciclando si es necesario
+            # Usamos un hash simple para que un mismo competidor tienda a tener el mismo color
+            color_index = abs(hash(vendedor)) % len(paleta_competidores)
+            colores.append(paleta_competidores[color_index])
+    
+    # Si nuestra empresa no estaba, no podemos asegurar el color verde.
+    # Esto es un fallback, pero no debería ocurrir con la lógica actual.
+    if not colores:
+        num_competidores = len(cols)
+        for i in range(num_competidores):
+            colores.append(paleta_competidores[i % len(paleta_competidores)])
+
+    return df_para_grafico, colores
     
     # --- 2. PREPARACIÓN DEL DATAFRAME PARA GRAFICAR ---
     
@@ -432,7 +473,6 @@ def run_dashboard():
 
         st.markdown("---")
         
-        # --- Gráfico de Tendencia ---
         # --- Gráfico de Tendencia ---
         st.subheader("Evolución de Precios (Últimos 15 días)")
         df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
