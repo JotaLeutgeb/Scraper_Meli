@@ -426,11 +426,8 @@ def run_dashboard():
             
             kpis_ayer = calcular_kpis(df_contexto_ayer, NUESTRO_SELLER_NAME, nuestro_precio_ayer)
             posicion_num_ayer = kpis_ayer['posicion_num']
-            
-            precio_lider_ayer = df_contexto_ayer['precio'].min() if not df_contexto_ayer.empty else 0
 
         st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
-        st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
         st.markdown("---")
 
         # --- Métricas con Escalador Integrado ---
