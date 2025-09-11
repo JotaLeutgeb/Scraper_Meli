@@ -380,9 +380,6 @@ def run_dashboard():
             df_contexto_display = df_simulacion.copy()
             nuestro_precio_display = nuevo_precio_simulado
 
-        if not df_contexto_display.empty:
-            df_contexto_display = df_contexto_display.loc[df_contexto_display.groupby('nombre_vendedor')['precio'].idxmin()]
-
         # --- Asignar sort_priority global ---
         df_contexto_display['sort_priority'] = 2
         df_contexto_display.loc[df_contexto_display['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'sort_priority'] = 0
@@ -460,10 +457,13 @@ def run_dashboard():
         
         graph_col1, graph_col2 = st.columns(2)
 
+        graph_col1, graph_col2 = st.columns(2)
+
         with graph_col1:
             st.subheader("Panorama de Precios")
-            if not df_contexto_sorted.empty:
-                df_plot = df_contexto_sorted[['nombre_vendedor', 'precio', 'sort_priority']].copy()
+            # Usamos el df_contexto_display COMPLETO, sin filtrar filas.
+            if not df_contexto_display.empty:
+                df_plot = df_contexto_display[['nombre_vendedor', 'precio', 'sort_priority']].copy()
                 df_plot['tipo'] = 'Competidor'
 
                 somos_lider = (NUESTRO_SELLER_NAME == kpis['nombre_lider'])
@@ -479,13 +479,23 @@ def run_dashboard():
 
                 df_plot['precio_formateado'] = df_plot['precio'].apply(format_price)
 
-                # Usamos el orden final de df_contexto_sorted
-                sort_order = df_plot['nombre_vendedor'].tolist()
+                # 1. Creamos un df temporal para determinar el orden basado en el PRECIO MÍNIMO de cada vendedor.
+                df_sort_logic = df_plot.groupby('nombre_vendedor').agg(
+                    min_precio=('precio', 'min'),
+                    priority=('sort_priority', 'min') # La prioridad es la misma para todas sus publicaciones
+                ).reset_index()
+
+                # 2. Ordenamos este df temporal para obtener la secuencia correcta de vendedores.
+                df_sort_logic_sorted = df_sort_logic.sort_values(by=['min_precio', 'priority'])
+                
+                # 3. Extraemos la lista de nombres de vendedores en el orden correcto.
+                sort_order = df_sort_logic_sorted['nombre_vendedor'].tolist()
 
                 chart_dot = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
                     x=alt.X('precio:Q', title='Precio',
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
-                    y=alt.Y('nombre_vendedor:N', sort=sort_order[::-1], title=None),  # invertimos el orden
+                    # 4. Usamos la lista de orden para el eje Y, mientras graficamos TODOS los puntos de df_plot.
+                    y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_),
                                     legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
