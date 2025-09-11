@@ -356,6 +356,7 @@ def run_dashboard():
         if filtro_cuotas > 0: df_contexto_real = df_contexto_real[df_contexto_real['cuotas_sin_interes'] >= filtro_cuotas]
         
         nuestro_precio_real = nuestra_oferta_real['precio'].min() if not nuestra_oferta_real.empty else 0
+        precio_lider_hoy = df_contexto_real['precio'].min() if not df_contexto_real.empty else 0
 
 
         st.sidebar.header("🧪 Simulador de Escenarios")
