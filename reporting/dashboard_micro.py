@@ -371,7 +371,19 @@ def run_dashboard():
             df_contexto_display = df_simulacion.copy()
             nuestro_precio_display = nuevo_precio_simulado
 
-        kpis = calcular_kpis(df_contexto_display, NUESTRO_SELLER_NAME, nuestro_precio_display)
+        # --- Asignar sort_priority global ---
+        df_contexto_display['sort_priority'] = 2
+        df_contexto_display.loc[df_contexto_display['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'sort_priority'] = 0
+
+        # Identificar líder según precio + prioridad
+        df_contexto_sorted = df_contexto_display.sort_values(by=['precio', 'sort_priority']).reset_index(drop=True)
+        if not df_contexto_sorted.empty:
+            lider_row = df_contexto_sorted.iloc[0]
+            if lider_row['nombre_vendedor'] != NUESTRO_SELLER_NAME:
+                df_contexto_display.loc[df_contexto_display['nombre_vendedor'] == lider_row['nombre_vendedor'], 'sort_priority'] = 1
+
+        # KPIs usan df_contexto_sorted ya con prioridad
+        kpis = calcular_kpis(df_contexto_sorted, NUESTRO_SELLER_NAME, nuestro_precio_display)
 
         posicion_num_hoy = kpis['posicion_num']
         posicion_num_ayer = "N/A"
@@ -434,44 +446,38 @@ def run_dashboard():
 
         with graph_col1:
             st.subheader("Panorama de Precios")
-            if not df_contexto_display.empty:
-                df_plot = df_contexto_display[['nombre_vendedor', 'precio']].copy()
+            if not df_contexto_sorted.empty:
+                df_plot = df_contexto_sorted[['nombre_vendedor', 'precio', 'sort_priority']].copy()
                 df_plot['tipo'] = 'Competidor'
 
                 somos_lider = (NUESTRO_SELLER_NAME == kpis['nombre_lider'])
-
-                # Asignar prioridad de ordenamiento: 0 para nosotros, 1 para el líder, 2 para el resto.
-                df_plot['sort_priority'] = 2 
-                df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'sort_priority'] = 0
-                
                 if somos_lider:
                     df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa (Líder)'
                     domain = ['Nuestra Empresa (Líder)', 'Competidor']
                     range_ = ['#2ECC71', '#3498DB']
                 else:
-                    df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'sort_priority'] = 1
-                    df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
                     df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'tipo'] = 'Líder'
+                    df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
                     domain = ['Líder', 'Nuestra Empresa', 'Competidor']
                     range_ = ['#FF4B4B', '#2ECC71', '#3498DB']
-                
+
                 df_plot['precio_formateado'] = df_plot['precio'].apply(format_price)
 
-                # Pre-ordenar el DataFrame con Pandas y pasar la lista de nombres.
-                df_plot_sorted = df_plot.sort_values(by=['precio', 'sort_priority'])
-                print(df_plot_sorted)
-                sort_order = df_plot_sorted['nombre_vendedor'].tolist()
+                # Usamos el orden final de df_contexto_sorted
+                sort_order = df_plot['nombre_vendedor'].tolist()
 
-                chart = alt.Chart(df_plot_sorted).mark_circle(size=120, opacity=0.8).encode(
-                x=alt.X('precio:Q', title='Precio',
-                        axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
-                y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
-                    color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
+                chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
+                    x=alt.X('precio:Q', title='Precio',
+                            axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
+                    y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
+                    color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_),
+                                    legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
-
+                st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("No hay datos para mostrar en el panorama de precios para el contexto seleccionado.")
+
 
         with graph_col2:
             st.subheader("Evolución de Precios")
