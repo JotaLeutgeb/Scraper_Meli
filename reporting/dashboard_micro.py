@@ -380,6 +380,9 @@ def run_dashboard():
             df_contexto_display = df_simulacion.copy()
             nuestro_precio_display = nuevo_precio_simulado
 
+        if not df_contexto_display.empty:
+            df_contexto_display = df_contexto_display.loc[df_contexto_display.groupby('nombre_vendedor')['precio'].idxmin()]
+
         # --- Asignar sort_priority global ---
         df_contexto_display['sort_priority'] = 2
         df_contexto_display.loc[df_contexto_display['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'sort_priority'] = 0
