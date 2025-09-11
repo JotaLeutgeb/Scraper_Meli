@@ -355,7 +355,8 @@ def run_dashboard():
         if filtro_factura_a: df_contexto_real = df_contexto_real[df_contexto_real['factura_a'] == True]
         if filtro_cuotas > 0: df_contexto_real = df_contexto_real[df_contexto_real['cuotas_sin_interes'] >= filtro_cuotas]
         
-        nuestro_precio_real = nuestra_oferta_real['precio'].iloc[0] if not nuestra_oferta_real.empty else 0
+        nuestro_precio_real = nuestra_oferta_real['precio'].min() if not nuestra_oferta_real.empty else 0
+
 
         st.sidebar.header("🧪 Simulador de Escenarios")
         nuevo_precio_simulado = st.sidebar.number_input(
@@ -409,7 +410,7 @@ def run_dashboard():
             if filtro_cuotas > 0: df_contexto_ayer = df_contexto_ayer[df_contexto_ayer['cuotas_sin_interes'] >= filtro_cuotas]
             
             nuestra_oferta_ayer = df_ayer[df_ayer['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
-            nuestro_precio_ayer = nuestra_oferta_ayer['precio'].iloc[0] if not nuestra_oferta_ayer.empty else 0
+            nuestro_precio_ayer = nuestra_oferta_ayer['precio'].min() if not nuestra_oferta_ayer.empty else 0
             
             kpis_ayer = calcular_kpis(df_contexto_ayer, NUESTRO_SELLER_NAME, nuestro_precio_ayer)
             posicion_num_ayer = kpis_ayer['posicion_num']
@@ -448,10 +449,10 @@ def run_dashboard():
             delta_color_nuestro = "off"
             if nuestro_precio_display > 0 and nuestro_precio_ayer > 0:
                 cambio_precio = nuestro_precio_display - nuestro_precio_ayer
-                if cambio_precio < 0:
-                    delta_color_nuestro = "inverse"  # Verde si bajó
-                elif cambio_precio > 0:
-                    delta_color_nuestro = "normal" # Rojo si subió
+                if cambio_precio > 0:
+                    delta_color_nuestro = "inverse"  # rojo si subió
+                elif cambio_precio < 0:
+                    delta_color_nuestro = "normal"   # verde si bajó
                 
                 if cambio_precio != 0:
                     delta_text_nuestro = f"{format_price(cambio_precio)}"
@@ -461,18 +462,19 @@ def run_dashboard():
                 value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A",
                 delta=delta_text_nuestro,
                 delta_color=delta_color_nuestro,
-                help="Indica el cambio de nuestro precio respecto al día anterior."
+                help="Indica el cambio de nuestro precio (mínimo) respecto al día anterior."
             )
+
         with col3:
             delta_text_lider = None
             delta_color_lider = "off"
             precio_lider_hoy = kpis['precio_lider']
             if precio_lider_hoy > 0 and precio_lider_ayer > 0:
                 cambio_precio = precio_lider_hoy - precio_lider_ayer
-                if cambio_precio < 0:
-                    delta_color_lider = "normal"
-                elif cambio_precio > 0:
-                    delta_color_lider = "inverse"
+                if cambio_precio > 0:
+                    delta_color_lider = "inverse"  # rojo si subió
+                elif cambio_precio < 0:
+                    delta_color_lider = "normal"   # verde si bajó
                 
                 if cambio_precio != 0:
                     delta_text_lider = f"{format_price(cambio_precio)}"
