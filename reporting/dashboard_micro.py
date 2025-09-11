@@ -78,8 +78,9 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 
 def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio: float):
     """
-    Calcula los KPIs clave de forma segura, manejando casos borde donde
-    nuestra empresa o competidores son excluidos por los filtros.
+    Calcula los KPIs clave respetando la prioridad de ordenamiento.
+    - sort_priority: 0 = nosotros, 1 = líder, 2 = resto
+    - En caso de empate de precio, se aplica sort_priority.
     """
     kpis = {
         "posicion_num": "N/A",
@@ -94,12 +95,19 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
         kpis["posicion_str"] = "Fuera de Filtro" if nuestro_precio > 0 else "N/A"
         return kpis
 
-    df_contexto_sorted = df_contexto.sort_values(by=['precio', 'nombre_vendedor'], ascending=True).reset_index(drop=True)
+    # Ordenar por precio y sort_priority
+    sort_cols = ['precio']
+    if 'sort_priority' in df_contexto.columns:
+        sort_cols.append('sort_priority')
 
+    df_contexto_sorted = df_contexto.sort_values(by=sort_cols, ascending=True).reset_index(drop=True)
+
+    # Líder
     kpis["nombre_lider"] = df_contexto_sorted.iloc[0]['nombre_vendedor']
     kpis["precio_lider"] = df_contexto_sorted.iloc[0]['precio']
     kpis["link_lider"] = df_contexto_sorted.iloc[0].get('link_publicacion', '#')
 
+    # Nuestra posición
     nuestra_pos_info = df_contexto_sorted[df_contexto_sorted['nombre_vendedor'] == nuestro_seller]
 
     if not nuestra_pos_info.empty:
@@ -109,6 +117,7 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
         kpis["posicion_str"] = "Fuera de Filtro"
 
     return kpis
+
 
 def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
     """
@@ -466,15 +475,14 @@ def run_dashboard():
                 # Usamos el orden final de df_contexto_sorted
                 sort_order = df_plot['nombre_vendedor'].tolist()
 
-                chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
-                    x=alt.X('nombre_vendedor:N', sort=sort_order, title=None),
+                chart = alt.Chart(df_plot).mark_bar().encode(
+                    y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
+                    x=alt.X('precio:Q', title='Precio',
+                            axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_),
                                     legend=alt.Legend(title="Leyenda", orient="top")),
-                    y=alt.Y('precio:Q', title='Precio',
-                            axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
-                ).properties(height=350).interactive()
-                st.altair_chart(chart, use_container_width=True)
+                ).properties(height=350)
             else:
                 st.info("No hay datos para mostrar en el panorama de precios para el contexto seleccionado.")
 
