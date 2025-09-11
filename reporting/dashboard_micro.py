@@ -460,10 +460,10 @@ def run_dashboard():
                     x=alt.X('precio:Q', title='Precio', 
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                     y=alt.Y('nombre_vendedor:N', title=None, 
-                            sort=alt.Sort([
-                                alt.SortField(field='precio', order='ascending'),
-                                alt.SortField(field='sort_priority', order='ascending')
-                            ])),
+                            sort=[
+                                alt.SortField('precio', order='ascending'),
+                                alt.SortField('sort_priority', order='ascending')
+                            ]),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
