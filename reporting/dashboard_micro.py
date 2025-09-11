@@ -591,12 +591,18 @@ def run_dashboard():
 
         with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
             if not df_contexto_display.empty:
-                columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
-                columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
+                # 1. Ordena el DataFrame original que SÍ contiene 'sort_priority'.
+                df_sorted = df_contexto_display.sort_values(by=['precio', 'sort_priority']).reset_index(drop=True)
+
+                # 2. Define las columnas que quieres mostrar al final.
+                columnas_a_mostrar = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
+                columnas_existentes = [col for col in columnas_a_mostrar if col in df_sorted.columns]
                 
-                df_tabla_display = df_contexto_display[columnas_existentes_tabla].copy()
+                # 3. Crea el DataFrame final para mostrar, seleccionando las columnas del DataFrame YA ordenado.
+                df_tabla_display = df_sorted[columnas_existentes].copy()
+                
+                # 4. Aplica el formato de precio.
                 if 'precio' in df_tabla_display.columns:
-                    df_tabla_display = df_tabla_display.sort_values(by=['precio', 'sort_priority']).reset_index(drop=True)
                     df_tabla_display['precio'] = df_tabla_display['precio'].apply(format_price)
 
                 st.dataframe(
