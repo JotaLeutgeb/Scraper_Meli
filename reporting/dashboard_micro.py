@@ -440,6 +440,7 @@ def run_dashboard():
 
                 somos_lider = (NUESTRO_SELLER_NAME == kpis['nombre_lider'])
 
+                # Asignar prioridad de ordenamiento: 0 para nosotros, 1 para el líder, 2 para el resto.
                 df_plot['sort_priority'] = 2 
                 df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'sort_priority'] = 0
                 
@@ -456,19 +457,19 @@ def run_dashboard():
                 
                 df_plot['precio_formateado'] = df_plot['precio'].apply(format_price)
 
-                # Pre-ordenamos el DataFrame para obtener el orden explícito para el gráfico
+                # Pre-ordenar el DataFrame con Pandas y pasar la lista de nombres.
                 df_plot_sorted = df_plot.sort_values(by=['precio', 'sort_priority'])
+                print(df_plot_sorted)
                 sort_order = df_plot_sorted['nombre_vendedor'].tolist()
 
-                chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
-                    x=alt.X('precio:Q', title='Precio', 
-                            axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
-                    y=alt.Y('nombre_vendedor:N', title=None, 
-                            sort=sort_order),
+                chart = alt.Chart(df_plot_sorted).mark_circle(size=120, opacity=0.8).encode(
+                x=alt.X('precio:Q', title='Precio',
+                        axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
+                y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
-                st.altair_chart(chart, use_container_width=True)
+
             else:
                 st.info("No hay datos para mostrar en el panorama de precios para el contexto seleccionado.")
 
@@ -542,5 +543,3 @@ def run_dashboard():
 
 if __name__ == "__main__":
     run_dashboard()
-
-
