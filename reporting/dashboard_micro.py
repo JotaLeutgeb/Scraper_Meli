@@ -112,7 +112,7 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
 
     if not nuestra_pos_info.empty:
         kpis["posicion_num"] = nuestra_pos_info.index[0] + 1
-        kpis["posicion_str"] = f"#{kpis['posicion_num']}"
+        kpis["posicion_str"] = f"{kpis['posicion_num']}"
     elif nuestro_precio > 0:
         kpis["posicion_str"] = "Fuera de Filtro"
 
@@ -414,7 +414,7 @@ def run_dashboard():
             
             kpis_ayer = calcular_kpis(df_contexto_ayer, NUESTRO_SELLER_NAME, nuestro_precio_ayer)
             posicion_num_ayer = kpis_ayer['posicion_num']
-            precio_lider_ayer = kpis_ayer['precio_lider']
+            precio_lider_ayer = df_contexto_ayer['precio'].min() if not df_contexto_ayer.empty else 0
 
         st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
         st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
@@ -468,7 +468,10 @@ def run_dashboard():
         with col3:
             delta_text_lider = None
             delta_color_lider = "off"
-            precio_lider_hoy = kpis['precio_lider']
+
+            precio_lider_hoy = df_contexto_display['precio'].min() if not df_contexto_display.empty else 0
+            precio_lider_ayer = df_contexto_ayer['precio'].min() if not df_contexto_ayer.empty else 0
+
             if precio_lider_hoy > 0 and precio_lider_ayer > 0:
                 cambio_precio = precio_lider_hoy - precio_lider_ayer
                 if cambio_precio > 0:
@@ -484,8 +487,9 @@ def run_dashboard():
                 value=format_price(precio_lider_hoy) if precio_lider_hoy > 0 else "N/A",
                 delta=delta_text_lider,
                 delta_color=delta_color_lider,
-                help="Indica el cambio del precio del líder respecto al día anterior."
+                help="Indica el cambio del precio mínimo del mercado respecto al día anterior."
             )
+
         with col4:
             if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
                 delta_text = f"{format_price(nuestro_precio_display - nuestro_precio_real)} vs. real" if modo_simulacion else None
