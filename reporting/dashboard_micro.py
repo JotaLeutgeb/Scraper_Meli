@@ -330,7 +330,7 @@ def run_dashboard():
         # --- LÓGICA DE FILTROS Y DATOS ---
         
         # --- Punto 5: Mostrar nombre de la empresa arriba ---
-        st.sidebar.title(f"Empresa:\n{NUESTRO_SELLER_NAME}")
+        st.sidebar.title(f"{NUESTRO_SELLER_NAME}")
 
         st.sidebar.header("Filtros Principales")
         producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
@@ -410,18 +410,29 @@ def run_dashboard():
             if not df_contexto_display.empty:
                 df_plot = df_contexto_display[['nombre_vendedor', 'precio']].copy()
                 df_plot['tipo'] = 'Competidor'
-                df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
-                df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'tipo'] = 'Líder'
+
+                # --- Lógica mejorada para manejar el caso de ser líder ---
+                somos_lider = (NUESTRO_SELLER_NAME == kpis['nombre_lider'])
+
+                if somos_lider:
+                    # Si somos el líder, usamos una etiqueta especial y una paleta de colores adaptada
+                    df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa (Líder)'
+                    domain = ['Nuestra Empresa (Líder)', 'Competidor']
+                    range_ = ['#2ECC71', '#3498DB'] # Verde para nosotros (líder), azul para competidores
+                else:
+                    # Si no somos el líder, la lógica original aplica
+                    df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
+                    df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'tipo'] = 'Líder'
+                    domain = ['Líder', 'Nuestra Empresa', 'Competidor']
+                    range_ = ['#FF4B4B', '#2ECC71', '#3498DB']
                 
-                # --- Punto 6: Formato para tooltip del gráfico ---
                 df_plot['precio_formateado'] = df_plot['precio'].apply(format_price)
 
                 chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
                     x=alt.X('precio:Q', title='Precio', 
-                            # --- Punto 6: Formato para eje del gráfico ---
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                     y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
-                    color=alt.Color('tipo:N', scale=alt.Scale(domain=['Líder', 'Nuestra Empresa', 'Competidor'], range=['#FF4B4B', '#2ECC71', '#3498DB']), legend=alt.Legend(title="Leyenda", orient="top")),
+                    color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
                 st.altair_chart(chart, use_container_width=True)
