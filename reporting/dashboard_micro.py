@@ -455,7 +455,7 @@ def run_dashboard():
                     flecha, color = "", "gray"
                 texto = f"{format_price(cambio_precio)} vs ayer" if cambio_precio != 0 else "Sin cambios"
             else:
-                flecha, texto, color = "", "N/A", "Sin cambios"
+                flecha, texto, color = "", "Sin cambios", "gray"
 
             st.markdown(f"""
             <div style="text-align:center; font-size:1.2em;">
