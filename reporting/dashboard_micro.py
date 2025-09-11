@@ -414,6 +414,7 @@ def run_dashboard():
             
             kpis_ayer = calcular_kpis(df_contexto_ayer, NUESTRO_SELLER_NAME, nuestro_precio_ayer)
             posicion_num_ayer = kpis_ayer['posicion_num']
+            
             precio_lider_ayer = df_contexto_ayer['precio'].min() if not df_contexto_ayer.empty else 0
 
         st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
@@ -423,77 +424,81 @@ def run_dashboard():
         # --- Métricas con Escalador Integrado ---
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            delta_text_posicion = "Sin cambios"
-            delta_color_val = "off"  # gris por defecto y sin flecha
-
             if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
                 cambio_puestos = posicion_num_hoy - posicion_num_ayer
-                
                 if cambio_puestos < 0:
-                    # Mejoramos (posición más cercana al #1) -> Flecha verde hacia abajo
-                    delta_text_posicion = f"{abs(cambio_puestos)} vs ayer"
-                    delta_color_val = "normal"
+                    flecha = "⬇️"
+                    color = "green"
+                    texto = f"{flecha} {abs(cambio_puestos)}"
                 elif cambio_puestos > 0:
-                    # Empeoramos (posición más lejos del #1) -> Flecha roja hacia arriba
-                    delta_text_posicion = f"{abs(cambio_puestos)} vs ayer"
-                    delta_color_val = "inverse"
-            
-            st.metric(
-                label=f"🏆 Nuestra Posición", 
-                value=f"{kpis['posicion_str']} de {kpis['cant_total']}", 
-                delta=delta_text_posicion, 
-                delta_color=delta_color_val,
-            )
-        with col2:
-            delta_text_nuestro = None
-            delta_color_nuestro = "off"
+                    flecha = "⬆️"
+                    color = "red"
+                    texto = f"{flecha} {abs(cambio_puestos)}"
+                else:
+                    flecha = "⏸️"
+                    color = "gray"
+                    texto = "Sin cambios"
+            else:
+                flecha, color, texto = "❔", "gray", "N/A"
 
+            st.markdown(f"""
+            <div style="text-align:center; font-size:1.2em;">
+                <b>🏆 Nuestra Posición</b><br>
+                <span style="font-size:1.5em;">{kpis['posicion_str']} de {kpis['cant_total']}</span><br>
+                <span style="color:{color};">{texto}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # --- Columna 2: Nuestro Precio ---
+        with col2:
             if nuestro_precio_display > 0 and nuestro_precio_ayer > 0:
                 cambio_precio = nuestro_precio_display - nuestro_precio_ayer
-
-                # Hack: invertir el valor para que la flecha quede como queremos
-                delta_valor = -cambio_precio  
-
                 if cambio_precio < 0:
-                    delta_color_nuestro = "normal"   # verde (precio bajó)
+                    flecha = "⬇️"
+                    color = "green"
                 elif cambio_precio > 0:
-                    delta_color_nuestro = "inverse"  # rojo (precio subió)
+                    flecha = "⬆️"
+                    color = "red"
+                else:
+                    flecha = "⏸️"
+                    color = "gray"
+                texto = f"{flecha} {format_price(cambio_precio)} vs ayer" if cambio_precio != 0 else "Sin cambios"
+            else:
+                texto, color = "N/A", "gray"
 
-                if cambio_precio != 0:
-                    delta_text_nuestro = f"{format_price(cambio_precio)}"
+            st.markdown(f"""
+            <div style="text-align:center; font-size:1.2em;">
+                <b>💲 Nuestro Precio</b><br>
+                <span style="font-size:1.5em;">{format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A"}</span><br>
+                <span style="color:{color};">{texto}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.metric(
-                label="💲 Nuestro Precio",
-                value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A",
-                delta=delta_text_nuestro,
-                delta_color=delta_color_nuestro
-            )
-
+        # --- Columna 3: Precio Líder ---
         with col3:
-            delta_text_lider = None
-            delta_color_lider = "off"
-
-            precio_lider_hoy = df_contexto_display['precio'].min() if not df_contexto_display.empty else 0
-            precio_lider_ayer = df_contexto_ayer['precio'].min() if not df_contexto_ayer.empty else 0
-
             if precio_lider_hoy > 0 and precio_lider_ayer > 0:
                 cambio_precio = precio_lider_hoy - precio_lider_ayer
-                delta_valor = -cambio_precio  # hack
-
                 if cambio_precio < 0:
-                    delta_color_lider = "normal"   # verde (precio bajó)
+                    flecha = "⬇️"
+                    color = "green"
                 elif cambio_precio > 0:
-                    delta_color_lider = "inverse"  # rojo (precio subió)
+                    flecha = "⬆️"
+                    color = "red"
+                else:
+                    flecha = "⏸️"
+                    color = "gray"
+                texto = f"{flecha} {format_price(cambio_precio)} vs ayer" if cambio_precio != 0 else "Sin cambios"
+            else:
+                texto, color = "N/A", "gray"
 
-                if cambio_precio != 0:
-                    delta_text_lider = f"{format_price(cambio_precio)}"
+            st.markdown(f"""
+            <div style="text-align:center; font-size:1.2em;">
+                <b>🥇 Precio Líder</b><br>
+                <span style="font-size:1.5em;">{format_price(precio_lider_hoy) if precio_lider_hoy > 0 else "N/A"}</span><br>
+                <span style="color:{color};">{texto}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.metric(
-                label="🥇 Precio Líder",
-                value=format_price(precio_lider_hoy) if precio_lider_hoy > 0 else "N/A",
-                delta=delta_text_lider,
-                delta_color=delta_color_lider
-            )
 
 
         with col4:
@@ -610,6 +615,7 @@ def run_dashboard():
                 
                 df_tabla_display = df_contexto_display[columnas_existentes_tabla].copy()
                 if 'precio' in df_tabla_display.columns:
+                    df_tabla_display = df_tabla_display.sort_values(by=['precio', 'sort_priority']).reset_index(drop=True)
                     df_tabla_display['precio'] = df_tabla_display['precio'].apply(format_price)
 
                 st.dataframe(
