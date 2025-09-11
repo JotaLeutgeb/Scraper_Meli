@@ -51,6 +51,30 @@ def get_product_data(tabla_crudos: str, producto: str):
     return df
 
 # -----------------------------------------------------------------------------
+# FUNCIONES DE FORMATO Y ESTILO
+def format_price(price):
+    """Formatea el precio con punto para miles y sin decimales."""
+    if pd.isna(price):
+        return "$ s/p"  # Sin precio
+    try:
+        price_int = int(price)
+        formatted_with_commas = f"${price_int:,}"
+        formatted_with_dots = formatted_with_commas.replace(',', '.')
+        return formatted_with_dots
+    except (ValueError, TypeError):
+        return f"${price}"
+
+def highlight_nuestro_seller(row, seller_name_to_highlight: str):
+    """
+    Función de estilo para resaltar nuestra fila en el DataFrame.
+    Usa un color que funciona tanto en modo claro como oscuro.
+    """
+    if row['nombre_vendedor'] == seller_name_to_highlight:
+        # Fondo amarillo claro con texto oscuro para máxima legibilidad en ambos temas.
+        return ['background-color: #FFFF99; color: #31333F; font-weight: bold;'] * len(row)
+    return [''] * len(row)
+
+# -----------------------------------------------------------------------------
 # FUNCIÓN DE ANÁLISIS Y LÓGICA DE NEGOCIO
 
 def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio: float):
@@ -139,7 +163,6 @@ def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
 
     if df_largo.empty: return None, None
 
-    # --- CAMBIO CLAVE: Usar aggfunc='min' ---
     # Si un vendedor tiene varios precios en un día, graficamos el más bajo.
     df_para_grafico = df_largo.pivot_table(
         index='fecha_extraccion',
@@ -276,11 +299,18 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 # -----------------------------------------------------------------------------
 # CONFIGURACIÓN E INTERFAZ DEL DASHBOARD
 def run_dashboard():
-    # --- Toda la lógica y la interfaz de Streamlit deben estar DENTRO de esta función ---
     
     st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
 
-    # Inicializar la variable de estado para la sugerencia de IA
+    # --- Punto 3: CSS para letras de filtros más chicas ---
+    st.markdown("""
+        <style>
+            div[data-testid="stSidebar"] div[data-testid="stWidgetLabel"] label {
+                font-size: 0.9rem !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
     if 'sugerencia_ia' not in st.session_state:
         st.session_state.sugerencia_ia = None
     
@@ -294,13 +324,14 @@ def run_dashboard():
         st.error(f"Error: No se encontró la 'client_config' en los secretos. Detalles: {e}")
         st.stop()
 
-    st.markdown(f"Análisis para **{NUESTRO_SELLER_NAME}**. Use los filtros para explorar el mercado.")
-
-
     productos_disponibles = get_product_list(TABLA_CRUDOS)
 
     if productos_disponibles:
-        # --- LÓGICA PRINCIPAL DEL DASHBOARD (SI HAY DATOS) ---
+        # --- LÓGICA DE FILTROS Y DATOS ---
+        
+        # --- Punto 5: Mostrar nombre de la empresa arriba ---
+        st.sidebar.title(f"Empresa:\n{NUESTRO_SELLER_NAME}")
+
         st.sidebar.header("Filtros Principales")
         producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
         df_producto = get_product_data(TABLA_CRUDOS, producto_seleccionado)
@@ -310,13 +341,12 @@ def run_dashboard():
         
         fecha_seleccionada = st.sidebar.date_input("Seleccione una Fecha", value=fecha_maxima, min_value=fecha_minima, max_value=fecha_maxima, format="DD/MM/YYYY")
         
-        st.sidebar.header("Filtros de Contexto de Mercado")
+        st.sidebar.header("Filtros de Contexto")
         filtro_full = st.sidebar.checkbox("Solo con Envío FULL", value=False)
         filtro_gratis = st.sidebar.checkbox("Solo con Envío Gratis", value=False)
         filtro_factura_a = st.sidebar.checkbox("Solo con Factura A", value=False)
         filtro_cuotas = st.sidebar.slider("Mínimo de cuotas sin interés", 0, 12, 0)
 
-        # --- Filtrado y Creación del Estado de Datos "Real" ---
         df_dia = df_producto[df_producto['fecha_extraccion'] == fecha_seleccionada].copy()
         nuestra_oferta_real = df_dia[df_dia['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
         
@@ -329,17 +359,18 @@ def run_dashboard():
         df_contexto_sorted_real = df_contexto_real.sort_values(by='precio', ascending=True).reset_index(drop=True)
         nuestro_precio_real = nuestra_oferta_real['precio'].iloc[0] if not nuestra_oferta_real.empty else 0
 
-        # --- Simulador de Escenarios ---
         st.sidebar.header("🧪 Simulador de Escenarios")
-        nuevo_precio_simulado = st.sidebar.number_input("Probar un nuevo precio para mi producto", value=None, placeholder=f"Actual: ${nuestro_precio_real:,.2f}")
+        nuevo_precio_simulado = st.sidebar.number_input(
+            f"Probar nuevo precio (Actual: {format_price(nuestro_precio_real)})", 
+            value=None, placeholder="Ingresa un valor..."
+        )
 
-        # --- Lógica de Estado de Visualización ---
         df_contexto_display = df_contexto_sorted_real.copy()
         nuestro_precio_display = nuestro_precio_real
-        modo_simulacion = False
+        modo_simulacion = bool(nuevo_precio_simulado and nuevo_precio_simulado > 0)
 
-        if nuevo_precio_simulado and nuevo_precio_simulado > 0:
-            modo_simulacion = True
+        if modo_simulacion:
+            st.warning("**MODO SIMULACIÓN ACTIVADO** - Los datos mostrados reflejan el precio simulado.", icon="🧪")
             df_simulacion = df_contexto_sorted_real.copy()
             if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
                 df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
@@ -351,156 +382,124 @@ def run_dashboard():
             df_contexto_display = df_simulacion.sort_values(by='precio').reset_index(drop=True)
             nuestro_precio_display = nuevo_precio_simulado
 
-        if modo_simulacion:
-            st.warning("**MODO SIMULACIÓN ACTIVADO** - Los datos mostrados reflejan el precio simulado.", icon="🧪")
-
-        # --- **NUEVO** Cálculo centralizado y robusto de KPIs ---
         kpis = calcular_kpis(df_contexto_display, NUESTRO_SELLER_NAME, nuestro_precio_display)
 
-        # --- Visualización de Título y Métricas ---
         st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
         st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
         st.markdown("---")
 
         col1, col2, col3, col4 = st.columns(4)
         with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=f"{kpis['posicion_num']} de {kpis['cant_total']}" if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'])
-        with col2: st.metric(label="💲 Nuestro Precio", value=f"${nuestro_precio_display:,.2f}" if nuestro_precio_display > 0 else "N/A")
-        with col3: st.metric(label="🥇 Precio Líder (contexto)", value=f"${kpis['precio_lider']:,.2f}" if kpis['precio_lider'] > 0 else "N/A")
+        # --- Punto 6: Aplicando formato a métricas ---
+        with col2: st.metric(label="💲 Nuestro Precio", value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A")
+        with col3: st.metric(label="🥇 Precio Líder (contexto)", value=format_price(kpis['precio_lider']) if kpis['precio_lider'] > 0 else "N/A")
         with col4:
             if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
                 dif_vs_lider = nuestro_precio_display - kpis['precio_lider']
-                delta_text = f"${(nuestro_precio_display - nuestro_precio_real):,.2f} vs. real" if modo_simulacion else None
-                st.metric(label="💰 Diferencia vs. Líder", value=f"${dif_vs_lider:,.2f}", delta=delta_text, delta_color="off")
+                delta_text = f"{format_price(nuestro_precio_display - nuestro_precio_real)} vs. real" if modo_simulacion else None
+                st.metric(label="💰 Diferencia vs. Líder", value=format_price(dif_vs_lider), delta=delta_text, delta_color="off")
             else:
                 st.metric(label="💰 Diferencia vs. Líder", value="N/A")
-
-        st.markdown("---")
-
-        # --- Gráfico Panorama de Precios ---
-        st.subheader("Panorama de Precios")
-        if not df_contexto_display.empty:
-            df_plot = df_contexto_display[['nombre_vendedor', 'precio']].copy()
-            
-            df_plot['tipo'] = 'Competidor'
-            df_plot['orden_render'] = 1
-            
-            # Usa el nombre del líder desde los KPIs ya calculados
-            lider_vendedor_nombre = kpis['nombre_lider']
-            
-            if NUESTRO_SELLER_NAME in df_plot['nombre_vendedor'].values:
-                nuestra_empresa_mask = df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME
-                df_plot.loc[nuestra_empresa_mask, 'tipo'] = 'Nuestra Empresa'
-                df_plot.loc[nuestra_empresa_mask, 'orden_render'] = 3
-            
-            if lider_vendedor_nombre != NUESTRO_SELLER_NAME:
-                lider_mask = df_plot['nombre_vendedor'] == lider_vendedor_nombre
-                df_plot.loc[lider_mask, 'tipo'] = 'Líder'
-                df_plot.loc[lider_mask, 'orden_render'] = 2
-            
-            min_precio = df_plot['precio'].min()
-            max_precio = df_plot['precio'].max()
-            padding = (max_precio - min_precio) * 0.05
-            if padding == 0: padding = min_precio * 0.05
-            dominio_min = min_precio - padding
-            dominio_max = max_precio + padding
-
-            chart = alt.Chart(df_plot).mark_circle(size=120).encode(
-                x=alt.X('precio:Q', title='Precio ($)', axis=alt.Axis(format='$,.0f'), scale=alt.Scale(domain=[dominio_min, dominio_max])),
-                y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
-                color=alt.Color('tipo:N', scale=alt.Scale(domain=['Líder', 'Nuestra Empresa', 'Competidor'], range=['#FF4B4B', '#2ECC71', '#3498DB']), legend=alt.Legend(title="Leyenda")),
-                order=alt.Order('orden_render:Q', sort='ascending'),
-                tooltip=['nombre_vendedor', alt.Tooltip('precio', format='$,.2f')]
-            ).properties(height=300).interactive()
-            st.altair_chart(chart, use_container_width=True)
-        else:
-            st.info("No hay datos para mostrar en el gráfico de panorama de precios para el contexto seleccionado.")
-
         st.markdown("---")
         
-        # --- Gráfico de Tendencia ---
-        st.subheader("Evolución de Precios (Últimos 15 días)")
-        df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
+        # --- Punto 1: Gráficos uno al lado del otro ---
+        graph_col1, graph_col2 = st.columns(2)
 
-        if not df_tendencia.empty:
-            df_grafico_tendencia, colores_tendencia = preparar_datos_tendencia(df_tendencia, NUESTRO_SELLER_NAME)
+        with graph_col1:
+            st.subheader("Panorama de Precios")
+            if not df_contexto_display.empty:
+                df_plot = df_contexto_display[['nombre_vendedor', 'precio']].copy()
+                df_plot['tipo'] = 'Competidor'
+                df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
+                df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'tipo'] = 'Líder'
+                
+                # --- Punto 6: Formato para tooltip del gráfico ---
+                df_plot['precio_formateado'] = df_plot['precio'].apply(format_price)
 
-            if df_grafico_tendencia is not None and not df_grafico_tendencia.empty:
-                st.info("Mostrando su empresa, el líder del día y los competidores con precio inferior al suyo. Puede hacer zoom vertical en el gráfico.")
-
-                # 1. Reformatear datos para Altair (formato "largo")
-                df_altair = df_grafico_tendencia.reset_index().melt('fecha_extraccion', var_name='serie', value_name='precio').dropna()
-
-                # 2. Construir el gráfico base con líneas y puntos
-                base = alt.Chart(df_altair).mark_line(point=True).encode(
-                    x=alt.X('fecha_extraccion:T', axis=alt.Axis(format='%d/%m', title='Fecha', labelAngle=0), title='Fecha'),
-                    y=alt.Y('precio:Q', axis=alt.Axis(format='$,.0f'), title='Precio'),
-                    color=alt.Color('serie:N',
-                                    scale=alt.Scale(domain=df_grafico_tendencia.columns.tolist(), range=colores_tendencia),
-                                    legend=alt.Legend(title="Vendedor")),
-                    tooltip=[
-                        alt.Tooltip('serie', title='Vendedor'),
-                        alt.Tooltip('fecha_extraccion', title='Fecha', format='%d/%m/%Y'),
-                        alt.Tooltip('precio', title='Precio', format='$,.2f')
-                    ]
-                )
-
-                # 3. Configurar interactividad para zoom SOLO en el eje Y
-                zoom = alt.selection_interval(bind='scales', encodings=['y'])
-
-                # 4. Crear el gráfico final y añadir la selección
-                chart = base.add_params(
-                    zoom
-                ).properties(
-                    height=400
-                ).interactive()
-
+                chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
+                    x=alt.X('precio:Q', title='Precio', 
+                            # --- Punto 6: Formato para eje del gráfico ---
+                            axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
+                    y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
+                    color=alt.Color('tipo:N', scale=alt.Scale(domain=['Líder', 'Nuestra Empresa', 'Competidor'], range=['#FF4B4B', '#2ECC71', '#3498DB']), legend=alt.Legend(title="Leyenda", orient="top")),
+                    tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
+                ).properties(height=350).interactive()
                 st.altair_chart(chart, use_container_width=True)
             else:
-                st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
-        else:
-            st.info("No hay suficientes datos históricos para mostrar una tendencia.")
+                st.info("No hay datos para mostrar en el panorama de precios para el contexto seleccionado.")
 
+        with graph_col2:
+            st.subheader("Evolución de Precios")
+            df_tendencia = df_producto[df_producto['fecha_extraccion'] >= (fecha_maxima - datetime.timedelta(days=15))]
+            if not df_tendencia.empty:
+                df_grafico_tendencia, colores_tendencia = preparar_datos_tendencia(df_tendencia, NUESTRO_SELLER_NAME)
+                if df_grafico_tendencia is not None and not df_grafico_tendencia.empty:
+                    df_altair = df_grafico_tendencia.reset_index().melt('fecha_extraccion', var_name='serie', value_name='precio').dropna()
+                    
+                    # --- Punto 6: Formato para tooltip del gráfico ---
+                    df_altair['precio_formateado'] = df_altair['precio'].apply(format_price)
 
-
-        # --- ANÁLISIS CON IA ---
-        st.subheader("Recomendaciones Estratégicas con IA")
-        if not df_contexto_display.empty or kpis['posicion_str'] in ["Fuera de Filtro", "N/A"]:
-            if st.button("🧠 Analizar Escenario con IA Pro"):
-                with st.spinner("Contactando al estratega IA Pro... Este análisis puede tardar unos segundos..."):
+                    base = alt.Chart(df_altair).mark_line(point=True).encode(
+                        x=alt.X('fecha_extraccion:T', axis=alt.Axis(format='%d/%m', title='Fecha', labelAngle=0)),
+                        y=alt.Y('precio:Q', title='Precio',
+                                # --- Punto 6: Formato para eje del gráfico ---
+                                axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
+                        color=alt.Color('serie:N', scale=alt.Scale(domain=df_grafico_tendencia.columns.tolist(), range=colores_tendencia), legend=alt.Legend(title="Vendedor", orient="top")),
+                        tooltip=[alt.Tooltip('serie', title='Vendedor'), alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'), alt.Tooltip('precio_formateado', title='Precio')]
+                    )
+                    chart = base.add_params(alt.selection_interval(bind='scales', encodings=['y'])).properties(height=350).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+                else:
+                    st.info("No se encontraron competidores relevantes para mostrar en la tendencia histórica.")
+            else:
+                st.info("No hay suficientes datos históricos para mostrar una tendencia.")
+        
+        st.markdown("---")
+        st.subheader("Asistente Estratégico IA")
+        
+        # --- Punto 2: Botones uno al lado del otro ---
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("🧠 Analizar Escenario con IA", use_container_width=True):
+                with st.spinner("Contactando al estratega IA..."):
                     pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
-
-                    # Crear el diccionario de contexto para la IA
                     contexto_ia = {
-                        "producto": producto_seleccionado,
-                        "nuestro_seller": NUESTRO_SELLER_NAME,
-                        "nuestro_precio": nuestro_precio_display,
-                        "posicion": kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'],
-                        "nombre_lider": kpis['nombre_lider'],
-                        "precio_lider": kpis['precio_lider'],
-                        "competidores_contexto": kpis['cant_total'],
-                        "total_competidores": len(df_dia),
+                        "producto": producto_seleccionado, "nuestro_seller": NUESTRO_SELLER_NAME,
+                        "nuestro_precio": nuestro_precio_display, "posicion": kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'],
+                        "nombre_lider": kpis['nombre_lider'], "precio_lider": kpis['precio_lider'],
+                        "competidores_contexto": kpis['cant_total'], "total_competidores": len(df_dia),
                         "pct_full": pct_full_contexto
                     }
-                    
-                    sugerencia = obtener_sugerencia_ia(contexto_ia)
-                    st.markdown(sugerencia)
-        else:
-            st.info("No hay competidores en el contexto seleccionado para realizar un análisis de IA.")
+                    st.session_state.sugerencia_ia = obtener_sugerencia_ia(contexto_ia)
 
+        with btn_col2:
+            st.button("⚡ Crear alerta (Próximamente)", disabled=True, use_container_width=True)
+
+        if st.session_state.sugerencia_ia:
+            st.markdown(st.session_state.sugerencia_ia)
+        
         st.markdown("---")
 
-        # --- TABLA DE DATOS DETALLADA ---
         with st.expander("Ver tabla de competidores en el contexto filtrado", expanded=False):
             if not df_contexto_display.empty:
                 columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
                 columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
+                
+                # Preparamos una copia del dataframe para no alterar el original
+                df_tabla_display = df_contexto_display[columnas_existentes_tabla].copy()
+                # --- Punto 6: Aplicando formato a la columna de precio de la tabla ---
+                if 'precio' in df_tabla_display.columns:
+                    df_tabla_display['precio'] = df_tabla_display['precio'].apply(format_price)
+
                 st.dataframe(
-                    df_contexto_display[columnas_existentes_tabla].style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
+                    df_tabla_display.style.apply(highlight_nuestro_seller, seller_name_to_highlight=NUESTRO_SELLER_NAME, axis=1),
                     use_container_width=True, hide_index=True)
             else:
                 st.write("Tabla vacía para el contexto actual.")
 
     else:
-        # --- MENSAJE DE ADVERTENCIA (SI NO HAY DATOS) ---
         st.warning(f"No se encontraron datos en la tabla '{TABLA_CRUDOS}' en los últimos 30 días.")
         st.info(f"Verifique que el pipeline para '{NUESTRO_SELLER_NAME}' se haya ejecutado correctamente.")
+
+if __name__ == "__main__":
+    run_dashboard()
