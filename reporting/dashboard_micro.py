@@ -329,7 +329,7 @@ def run_dashboard():
     productos_disponibles = get_product_list(TABLA_CRUDOS)
 
     if productos_disponibles:
-        st.sidebar.title(f"Empresa:\n{NUESTRO_SELLER_NAME}")
+        st.sidebar.title(f"{NUESTRO_SELLER_NAME}")
 
         st.sidebar.header("Filtros Principales")
         producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
@@ -420,18 +420,22 @@ def run_dashboard():
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             delta_text_posicion = None
-            delta_color_val = "normal"
+            delta_color_val = "off"  # gris por defecto
+
             if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
                 cambio_puestos = posicion_num_hoy - posicion_num_ayer
+                
                 if cambio_puestos < 0:
-                    delta_text_posicion = f"▾ {abs(cambio_puestos)} vs ayer"
-                    delta_color_val = "normal"
+                    # Mejoramos (posición más cercana al #1)
+                    delta_text_posicion = f"↓ {abs(cambio_puestos)} vs ayer"
+                    delta_color_val = "normal"   # verde
                 elif cambio_puestos > 0:
-                    delta_text_posicion = f"▴ {abs(cambio_puestos)} vs ayer"
-                    delta_color_val = "inverse"
+                    # Empeoramos (posición más lejos del #1)
+                    delta_text_posicion = f"↑ {abs(cambio_puestos)} vs ayer"
+                    delta_color_val = "inverse"  # rojo
                 else:
                     delta_text_posicion = "Sin cambios"
-                    delta_color_val = "off"
+                    delta_color_val = "off"      # gris
             
             st.metric(
                 label="🏆 Nuestra Posición", 
