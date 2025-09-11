@@ -449,9 +449,9 @@ def run_dashboard():
             if nuestro_precio_display > 0 and nuestro_precio_ayer > 0:
                 cambio_precio = nuestro_precio_display - nuestro_precio_ayer
                 if cambio_precio < 0:
-                    delta_color_nuestro = "normal"  # Verde si bajó
+                    delta_color_nuestro = "inverse"  # Verde si bajó
                 elif cambio_precio > 0:
-                    delta_color_nuestro = "inverse" # Rojo si subió
+                    delta_color_nuestro = "normal" # Rojo si subió
                 
                 if cambio_precio != 0:
                     delta_text_nuestro = f"{format_price(cambio_precio)}"
