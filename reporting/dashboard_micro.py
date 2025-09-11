@@ -315,10 +315,15 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 # CONFIGURACIÓN E INTERFAZ DEL DASHBOARD
 def run_dashboard():
     
-    st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
+    st.set_page_config(layout="wide", page_title="Delta Tracking Precios")
 
     st.markdown("""
         <style>
+            /* Regla para reducir el padding superior del contenedor principal */
+            div.block-container {
+                padding-top: 1rem !important;
+            }
+            /* Regla para reducir el tamaño de letra en la sidebar (existente) */
             div[data-testid="stSidebar"] div[data-testid="stWidgetLabel"] label {
                 font-size: 0.9rem !important;
             }
@@ -328,7 +333,7 @@ def run_dashboard():
     if 'sugerencia_ia' not in st.session_state:
         st.session_state.sugerencia_ia = None
     
-    st.title("Análisis Táctico con Asistente IA")
+    st.title("Delta Tracking Precios")
 
     try:
         config_cliente = st.secrets["client_config"]
