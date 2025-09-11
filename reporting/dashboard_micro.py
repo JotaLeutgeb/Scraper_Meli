@@ -70,7 +70,7 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
     Usa un color que funciona bien tanto en modo claro como oscuro.
     """
     if row['nombre_vendedor'] == seller_name_to_highlight:
-        return ['font-weight: bold;'] * len(row)
+        return ['color: 2EEC71; font-weight: bold;'] * len(row)
     return [''] * len(row)
 
 # -----------------------------------------------------------------------------
