@@ -193,7 +193,7 @@ def obtener_sugerencia_ia(contexto: dict):
     """Genera un análisis y sugerencias CONCISAS utilizando la IA Generativa de Google."""
     try:
         genai.configure(api_key=st.secrets.google_ai["api_key"])
-        model = genai.GenerativeModel('gemini-2.5-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         return f"Error al configurar la API de IA: {e}."
 
@@ -461,8 +461,8 @@ def run_dashboard():
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                     y=alt.Y('nombre_vendedor:N', title=None, 
                             sort=alt.Sort([
-                                alt.SortField(field='precio', op='min', order='ascending'),
-                                alt.SortField(field='sort_priority', op='min', order='ascending')
+                                alt.SortField(field='precio', order='ascending'),
+                                alt.SortField(field='sort_priority', order='ascending')
                             ])),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
