@@ -494,8 +494,8 @@ def run_dashboard():
                 chart_dot = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
                     x=alt.X('precio:Q', title='Precio',
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
-                    # 4. Usamos la lista de orden para el eje Y, mientras graficamos TODOS los puntos de df_plot.
-                    y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
+                    # 4. Usamos la lista de orden INVERTIDA para el eje Y, para que el más barato quede abajo.
+                    y=alt.Y('nombre_vendedor:N', sort=sort_order[::-1], title=None),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_),
                                     legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
