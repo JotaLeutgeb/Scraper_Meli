@@ -447,22 +447,26 @@ def run_dashboard():
         with col2:
             delta_text_nuestro = None
             delta_color_nuestro = "off"
+
             if nuestro_precio_display > 0 and nuestro_precio_ayer > 0:
                 cambio_precio = nuestro_precio_display - nuestro_precio_ayer
-                if cambio_precio > 0:
-                    delta_color_nuestro = "inverse"  # rojo si subió
-                elif cambio_precio < 0:
-                    delta_color_nuestro = "normal"   # verde si bajó
-                
+
+                # Hack: invertir el valor para que la flecha quede como queremos
+                delta_valor = -cambio_precio  
+
+                if cambio_precio < 0:
+                    delta_color_nuestro = "normal"   # verde (precio bajó)
+                elif cambio_precio > 0:
+                    delta_color_nuestro = "inverse"  # rojo (precio subió)
+
                 if cambio_precio != 0:
                     delta_text_nuestro = f"{format_price(cambio_precio)}"
 
             st.metric(
-                label="💲 Nuestro Precio", 
+                label="💲 Nuestro Precio",
                 value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A",
                 delta=delta_text_nuestro,
-                delta_color=delta_color_nuestro,
-                help="Indica el cambio de nuestro precio (mínimo) respecto al día anterior."
+                delta_color=delta_color_nuestro
             )
 
         with col3:
@@ -474,21 +478,23 @@ def run_dashboard():
 
             if precio_lider_hoy > 0 and precio_lider_ayer > 0:
                 cambio_precio = precio_lider_hoy - precio_lider_ayer
-                if cambio_precio > 0:
-                    delta_color_lider = "inverse"  # rojo si subió
-                elif cambio_precio < 0:
-                    delta_color_lider = "normal"   # verde si bajó
-                
+                delta_valor = -cambio_precio  # hack
+
+                if cambio_precio < 0:
+                    delta_color_lider = "normal"   # verde (precio bajó)
+                elif cambio_precio > 0:
+                    delta_color_lider = "inverse"  # rojo (precio subió)
+
                 if cambio_precio != 0:
                     delta_text_lider = f"{format_price(cambio_precio)}"
-            
+
             st.metric(
-                label="🥇 Precio Líder", 
+                label="🥇 Precio Líder",
                 value=format_price(precio_lider_hoy) if precio_lider_hoy > 0 else "N/A",
                 delta=delta_text_lider,
-                delta_color=delta_color_lider,
-                help="Indica el cambio del precio mínimo del mercado respecto al día anterior."
+                delta_color=delta_color_lider
             )
+
 
         with col4:
             if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
