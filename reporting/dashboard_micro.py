@@ -294,10 +294,15 @@ def obtener_sugerencia_ia(contexto: dict):
         return f"Error al generar la sugerencia de la IA: {e}"
 
 def highlight_nuestro_seller(row, seller_name_to_highlight: str):
-    """Función de estilo para resaltar nuestra fila en el DataFrame."""
+    """
+    Resalta solo la celda de 'nombre_vendedor' en verde y negrita.
+    """
+    styles = [''] * len(row)  # Por defecto, sin estilo
     if row['nombre_vendedor'] == seller_name_to_highlight:
-        return ['background-color: #1a3a2a; color: #2ECC71; font-weight: bold;'] * len(row)
-    return [''] * len(row)
+        # Encuentra el índice de la columna 'nombre_vendedor' y aplica estilo solo allí
+        idx = row.index.get_loc('nombre_vendedor')
+        styles[idx] = 'color: #2ECC71; font-weight: bold;'
+    return styles
 
 # -----------------------------------------------------------------------------
 # CONFIGURACIÓN E INTERFAZ DEL DASHBOARD
