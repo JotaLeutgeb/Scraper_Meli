@@ -396,6 +396,8 @@ def run_dashboard():
 
         posicion_num_hoy = kpis['posicion_num']
         posicion_num_ayer = "N/A"
+        nuestro_precio_ayer = 0
+        precio_lider_ayer = 0
         fecha_ayer = fecha_seleccionada - datetime.timedelta(days=1)
         df_ayer = df_producto[df_producto['fecha_extraccion'] == fecha_ayer].copy()
 
@@ -411,6 +413,7 @@ def run_dashboard():
             
             kpis_ayer = calcular_kpis(df_contexto_ayer, NUESTRO_SELLER_NAME, nuestro_precio_ayer)
             posicion_num_ayer = kpis_ayer['posicion_num']
+            precio_lider_ayer = kpis_ayer['precio_lider']
 
         st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
         st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
@@ -419,39 +422,74 @@ def run_dashboard():
         # --- Métricas con Escalador Integrado ---
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            delta_text_posicion = None
-            delta_color_val = "off"  # gris por defecto
+            delta_text_posicion = "Sin cambios"
+            delta_color_val = "off"  # gris por defecto y sin flecha
 
             if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
                 cambio_puestos = posicion_num_hoy - posicion_num_ayer
                 
                 if cambio_puestos < 0:
-                    # Mejoramos (posición más cercana al #1)
-                    delta_text_posicion = f"↓ {abs(cambio_puestos)} vs ayer"
-                    delta_color_val = "normal"   # verde
+                    # Mejoramos (posición más cercana al #1) -> Flecha verde hacia abajo
+                    delta_text_posicion = f"{abs(cambio_puestos)} vs ayer"
+                    delta_color_val = "normal"
                 elif cambio_puestos > 0:
-                    # Empeoramos (posición más lejos del #1)
-                    delta_text_posicion = f"↑ {abs(cambio_puestos)} vs ayer"
-                    delta_color_val = "inverse"  # rojo
-                else:
-                    delta_text_posicion = "Sin cambios"
-                    delta_color_val = "off"      # gris
+                    # Empeoramos (posición más lejos del #1) -> Flecha roja hacia arriba
+                    delta_text_posicion = f"{abs(cambio_puestos)} vs ayer"
+                    delta_color_val = "inverse"
             
             st.metric(
-                label="🏆 Nuestra Posición", 
-                value=kpis['posicion_str'], 
+                label=f"🏆 Nuestra Posición", 
+                value=f"{kpis['posicion_str']} de {kpis['cant_total']}", 
                 delta=delta_text_posicion, 
                 delta_color=delta_color_val,
-                help="Indica el cambio de posición respecto al día anterior bajo los mismos filtros."
             )
-        with col2: st.metric(label="💲 Nuestro Precio", value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A")
-        with col3: st.metric(label="🥇 Precio Líder", value=format_price(kpis['precio_lider']) if kpis['precio_lider'] > 0 else "N/A")
+        with col2:
+            delta_text_nuestro = None
+            delta_color_nuestro = "off"
+            if nuestro_precio_display > 0 and nuestro_precio_ayer > 0:
+                cambio_precio = nuestro_precio_display - nuestro_precio_ayer
+                if cambio_precio < 0:
+                    delta_color_nuestro = "normal"  # Verde si bajó
+                elif cambio_precio > 0:
+                    delta_color_nuestro = "inverse" # Rojo si subió
+                
+                if cambio_precio != 0:
+                    delta_text_nuestro = f"{format_price(cambio_precio)}"
+
+            st.metric(
+                label="💲 Nuestro Precio", 
+                value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A",
+                delta=delta_text_nuestro,
+                delta_color=delta_color_nuestro,
+                help="Indica el cambio de nuestro precio respecto al día anterior."
+            )
+        with col3:
+            delta_text_lider = None
+            delta_color_lider = "off"
+            precio_lider_hoy = kpis['precio_lider']
+            if precio_lider_hoy > 0 and precio_lider_ayer > 0:
+                cambio_precio = precio_lider_hoy - precio_lider_ayer
+                if cambio_precio < 0:
+                    delta_color_lider = "normal"
+                elif cambio_precio > 0:
+                    delta_color_lider = "inverse"
+                
+                if cambio_precio != 0:
+                    delta_text_lider = f"{format_price(cambio_precio)}"
+            
+            st.metric(
+                label="🥇 Precio Líder", 
+                value=format_price(precio_lider_hoy) if precio_lider_hoy > 0 else "N/A",
+                delta=delta_text_lider,
+                delta_color=delta_color_lider,
+                help="Indica el cambio del precio del líder respecto al día anterior."
+            )
         with col4:
             if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
                 delta_text = f"{format_price(nuestro_precio_display - nuestro_precio_real)} vs. real" if modo_simulacion else None
-                st.metric(label="💰 Dif vs. Líder", value=format_price(nuestro_precio_display - kpis['precio_lider']), delta=delta_text, delta_color="off")
+                st.metric(label="💰 Diferencia vs. Líder", value=format_price(nuestro_precio_display - kpis['precio_lider']), delta=delta_text, delta_color="off")
             else:
-                st.metric(label="💰 Dif vs. Líder", value="N/A")
+                st.metric(label="💰 Diferencia vs. Líder", value="N/A")
 
         st.markdown("---")
         
