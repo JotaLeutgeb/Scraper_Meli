@@ -399,7 +399,6 @@ def run_dashboard():
         posicion_num_hoy = kpis['posicion_num']
         posicion_num_ayer = "N/A"
         nuestro_precio_ayer = 0
-        precio_lider_ayer = 0
         fecha_ayer = fecha_seleccionada - datetime.timedelta(days=1)
         df_ayer = df_producto[df_producto['fecha_extraccion'] == fecha_ayer].copy()
 
@@ -428,25 +427,19 @@ def run_dashboard():
             if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
                 cambio_puestos = posicion_num_hoy - posicion_num_ayer
                 if cambio_puestos < 0:
-                    flecha = "⬇️"
-                    color = "green"
-                    texto = f"{flecha} {abs(cambio_puestos)}"
+                    flecha, color, texto = "⬇️", "green", f"{abs(cambio_puestos)} puestos"
                 elif cambio_puestos > 0:
-                    flecha = "⬆️"
-                    color = "red"
-                    texto = f"{flecha} {abs(cambio_puestos)}"
+                    flecha, color, texto = "⬆️", "red", f"{abs(cambio_puestos)} puestos"
                 else:
-                    flecha = "⏸️"
-                    color = "gray"
-                    texto = "Sin cambios"
+                    flecha, color, texto = "", "gray", "Sin cambios"
             else:
-                flecha, color, texto = "❔", "gray", "N/A"
+                flecha, color, texto = "", "gray", "Sin cambios"
 
             st.markdown(f"""
             <div style="text-align:center; font-size:1.2em;">
                 <b>🏆 Nuestra Posición</b><br>
                 <span style="font-size:1.5em;">{kpis['posicion_str']} de {kpis['cant_total']}</span><br>
-                <span style="color:{color};">{texto}</span>
+                <span style="color:{color};">{flecha} {texto}</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -455,59 +448,46 @@ def run_dashboard():
             if nuestro_precio_display > 0 and nuestro_precio_ayer > 0:
                 cambio_precio = nuestro_precio_display - nuestro_precio_ayer
                 if cambio_precio < 0:
-                    flecha = "⬇️"
-                    color = "green"
+                    flecha, color = "⬇️", "green"
                 elif cambio_precio > 0:
-                    flecha = "⬆️"
-                    color = "red"
+                    flecha, color = "⬆️", "red"
                 else:
-                    flecha = "⏸️"
-                    color = "gray"
-                texto = f"{flecha} {format_price(cambio_precio)} vs ayer" if cambio_precio != 0 else "Sin cambios"
+                    flecha, color = "", "gray"
+                texto = f"{format_price(cambio_precio)} vs ayer" if cambio_precio != 0 else "Sin cambios"
             else:
-                texto, color = "N/A", "gray"
+                flecha, texto, color = "", "N/A", "Sin cambios"
 
             st.markdown(f"""
             <div style="text-align:center; font-size:1.2em;">
                 <b>💲 Nuestro Precio</b><br>
                 <span style="font-size:1.5em;">{format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A"}</span><br>
-                <span style="color:{color};">{texto}</span>
+                <span style="color:{color};">{flecha} {texto}</span>
             </div>
             """, unsafe_allow_html=True)
 
-        # --- Columna 3: Precio Líder ---
+        # --- Columna 3: Precio Líder (Simplificado) ---
         with col3:
-            if precio_lider_hoy > 0 and precio_lider_ayer > 0:
-                cambio_precio = precio_lider_hoy - precio_lider_ayer
-                if cambio_precio < 0:
-                    flecha = "⬇️"
-                    color = "green"
-                elif cambio_precio > 0:
-                    flecha = "⬆️"
-                    color = "red"
-                else:
-                    flecha = "⏸️"
-                    color = "gray"
-                texto = f"{flecha} {format_price(cambio_precio)} vs ayer" if cambio_precio != 0 else "Sin cambios"
-            else:
-                texto, color = "N/A", "gray"
-
             st.markdown(f"""
             <div style="text-align:center; font-size:1.2em;">
                 <b>🥇 Precio Líder</b><br>
-                <span style="font-size:1.5em;">{format_price(precio_lider_hoy) if precio_lider_hoy > 0 else "N/A"}</span><br>
-                <span style="color:{color};">{texto}</span>
+                <span style="font-size:1.5em;">{format_price(kpis['precio_lider']) if kpis['precio_lider'] > 0 else 'N/A'}</span><br>
+                <span style="color:transparent;">.</span> <!-- Placeholder para alinear verticalmente -->
             </div>
             """, unsafe_allow_html=True)
 
-
-
+        # --- Columna 4: Diferencia vs. Líder (Simplificado) ---
         with col4:
             if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
-                delta_text = f"{format_price(nuestro_precio_display - nuestro_precio_real)} vs. real" if modo_simulacion else None
-                st.metric(label="💰 Diferencia vs. Líder", value=format_price(nuestro_precio_display - kpis['precio_lider']), delta=delta_text, delta_color="off")
+                valor_dif = format_price(nuestro_precio_display - kpis['precio_lider'])
             else:
-                st.metric(label="💰 Diferencia vs. Líder", value="N/A")
+                valor_dif = "N/A"
+            st.markdown(f"""
+            <div style="text-align:center; font-size:1.2em;">
+                <b>💰 Dif vs. Líder</b><br>
+                <span style="font-size:1.5em;">{valor_dif}</span><br>
+                <span style="color:transparent;">.</span> <!-- Placeholder para alinear verticalmente -->
+            </div>
+            """, unsafe_allow_html=True)
 
         st.markdown("---")
         
