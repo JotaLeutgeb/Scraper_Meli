@@ -456,14 +456,15 @@ def run_dashboard():
                 
                 df_plot['precio_formateado'] = df_plot['precio'].apply(format_price)
 
+                # Pre-ordenamos el DataFrame para obtener el orden explícito para el gráfico
+                df_plot_sorted = df_plot.sort_values(by=['precio', 'sort_priority'])
+                sort_order = df_plot_sorted['nombre_vendedor'].tolist()
+
                 chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
                     x=alt.X('precio:Q', title='Precio', 
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                     y=alt.Y('nombre_vendedor:N', title=None, 
-                            sort=[
-                                alt.SortField('precio', order='ascending'),
-                                alt.SortField('sort_priority', order='ascending')
-                            ]),
+                            sort=sort_order),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
@@ -541,3 +542,5 @@ def run_dashboard():
 
 if __name__ == "__main__":
     run_dashboard()
+
+
