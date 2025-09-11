@@ -475,16 +475,15 @@ def run_dashboard():
                 # Usamos el orden final de df_contexto_sorted
                 sort_order = df_plot['nombre_vendedor'].tolist()
 
-                chart_bar = alt.Chart(df_plot).mark_bar(opacity=0.8).encode(
-                    y=alt.Y('nombre_vendedor:N', sort=sort_order, title=None),
+                chart_dot = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
                     x=alt.X('precio:Q', title='Precio',
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
+                    y=alt.Y('nombre_vendedor:N', sort=sort_order[::-1], title=None),  # invertimos el orden
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_),
                                     legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
-                ).properties(height=350)
-
-                st.altair_chart(chart_bar, use_container_width=True)
+                ).properties(height=350).interactive()
+                st.altair_chart(chart_dot, use_container_width=True)
             else:
                 st.info("No hay datos para mostrar en el panorama de precios para el contexto seleccionado.")
 
