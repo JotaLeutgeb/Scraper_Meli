@@ -67,11 +67,10 @@ def format_price(price):
 def highlight_nuestro_seller(row, seller_name_to_highlight: str):
     """
     Función de estilo para resaltar nuestra fila en el DataFrame.
-    Usa un color que funciona tanto en modo claro como oscuro.
+    Usa un color que funciona bien tanto en modo claro como oscuro.
     """
     if row['nombre_vendedor'] == seller_name_to_highlight:
-        # Fondo amarillo claro con texto oscuro para máxima legibilidad en ambos temas.
-        return ['background-color: #FFFF99; color: #31333F; font-weight: bold;'] * len(row)
+        return ['background-color: #d4edda; font-weight: bold;'] * len(row)
     return [''] * len(row)
 
 # -----------------------------------------------------------------------------
@@ -97,12 +96,13 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
         return kpis
 
     # Extraer información del líder del mercado de forma segura.
-    kpis["nombre_lider"] = df_contexto.iloc[0]['nombre_vendedor']
-    kpis["precio_lider"] = df_contexto.iloc[0]['precio']
-    kpis["link_lider"] = df_contexto.iloc[0].get('link_publicacion', '#')
+    df_contexto_sorted = df_contexto.sort_values(by=['precio', 'nombre_vendedor'], ascending=True).reset_index(drop=True)
 
-    # Buscar nuestra posición en el contexto actual.
-    nuestra_pos_info = df_contexto[df_contexto['nombre_vendedor'] == nuestro_seller]
+    kpis["nombre_lider"] = df_contexto_sorted.iloc[0]['nombre_vendedor']
+    kpis["precio_lider"] = df_contexto_sorted.iloc[0]['precio']
+    kpis["link_lider"] = df_contexto_sorted.iloc[0].get('link_publicacion', '#')
+
+    nuestra_pos_info = df_contexto_sorted[df_contexto_sorted['nombre_vendedor'] == nuestro_seller]
 
     if not nuestra_pos_info.empty:
         # Si nos encontramos, calcular la posición numérica.
@@ -302,7 +302,6 @@ def run_dashboard():
     
     st.set_page_config(layout="wide", page_title="Análisis Táctico con IA")
 
-    # --- Punto 3: CSS para letras de filtros más chicas ---
     st.markdown("""
         <style>
             div[data-testid="stSidebar"] div[data-testid="stWidgetLabel"] label {
@@ -327,10 +326,7 @@ def run_dashboard():
     productos_disponibles = get_product_list(TABLA_CRUDOS)
 
     if productos_disponibles:
-        # --- LÓGICA DE FILTROS Y DATOS ---
-        
-        # --- Punto 5: Mostrar nombre de la empresa arriba ---
-        st.sidebar.title(f"{NUESTRO_SELLER_NAME}")
+        st.sidebar.title(f"Empresa:\n{NUESTRO_SELLER_NAME}")
 
         st.sidebar.header("Filtros Principales")
         producto_seleccionado = st.sidebar.selectbox("Seleccione un Producto", productos_disponibles)
@@ -356,7 +352,6 @@ def run_dashboard():
         if filtro_factura_a: df_contexto_real = df_contexto_real[df_contexto_real['factura_a'] == True]
         if filtro_cuotas > 0: df_contexto_real = df_contexto_real[df_contexto_real['cuotas_sin_interes'] >= filtro_cuotas]
         
-        df_contexto_sorted_real = df_contexto_real.sort_values(by='precio', ascending=True).reset_index(drop=True)
         nuestro_precio_real = nuestra_oferta_real['precio'].iloc[0] if not nuestra_oferta_real.empty else 0
 
         st.sidebar.header("🧪 Simulador de Escenarios")
@@ -365,13 +360,13 @@ def run_dashboard():
             value=None, placeholder="Ingresa un valor..."
         )
 
-        df_contexto_display = df_contexto_sorted_real.copy()
+        df_contexto_display = df_contexto_real.copy()
         nuestro_precio_display = nuestro_precio_real
         modo_simulacion = bool(nuevo_precio_simulado and nuevo_precio_simulado > 0)
 
         if modo_simulacion:
             st.warning("**MODO SIMULACIÓN ACTIVADO** - Los datos mostrados reflejan el precio simulado.", icon="🧪")
-            df_simulacion = df_contexto_sorted_real.copy()
+            df_simulacion = df_contexto_real.copy()
             if NUESTRO_SELLER_NAME in df_simulacion['nombre_vendedor'].values:
                 df_simulacion.loc[df_simulacion['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'precio'] = nuevo_precio_simulado
             elif not nuestra_oferta_real.empty:
@@ -379,30 +374,59 @@ def run_dashboard():
                 nuestra_fila.loc[:, 'precio'] = nuevo_precio_simulado
                 df_simulacion = pd.concat([df_simulacion, nuestra_fila], ignore_index=True)
             
-            df_contexto_display = df_simulacion.sort_values(by='precio').reset_index(drop=True)
+            df_contexto_display = df_simulacion.copy()
             nuestro_precio_display = nuevo_precio_simulado
 
         kpis = calcular_kpis(df_contexto_display, NUESTRO_SELLER_NAME, nuestro_precio_display)
+
+        # --- Punto 2: Lógica del Escalador de Posición ---
+        posicion_num_hoy = kpis['posicion_num']
+        posicion_num_ayer = "N/A"
+        fecha_ayer = fecha_seleccionada - datetime.timedelta(days=1)
+        df_ayer = df_producto[df_producto['fecha_extraccion'] == fecha_ayer].copy()
+
+        if not df_ayer.empty:
+            df_contexto_ayer = df_ayer.copy()
+            if filtro_full: df_contexto_ayer = df_contexto_ayer[df_contexto_ayer['envio_full'] == True]
+            if filtro_gratis: df_contexto_ayer = df_contexto_ayer[df_contexto_ayer['envio_gratis'] == True]
+            if filtro_factura_a: df_contexto_ayer = df_contexto_ayer[df_contexto_ayer['factura_a'] == True]
+            if filtro_cuotas > 0: df_contexto_ayer = df_contexto_ayer[df_contexto_ayer['cuotas_sin_interes'] >= filtro_cuotas]
+            
+            nuestra_oferta_ayer = df_ayer[df_ayer['nombre_vendedor'] == NUESTRO_SELLER_NAME].copy()
+            nuestro_precio_ayer = nuestra_oferta_ayer['precio'].iloc[0] if not nuestra_oferta_ayer.empty else 0
+            
+            kpis_ayer = calcular_kpis(df_contexto_ayer, NUESTRO_SELLER_NAME, nuestro_precio_ayer)
+            posicion_num_ayer = kpis_ayer['posicion_num']
 
         st.header(f"[{producto_seleccionado}]({kpis['link_lider']})")
         st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
         st.markdown("---")
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1: st.metric(label="🏆 Nuestra Posición (contexto)", value=f"{kpis['posicion_num']} de {kpis['cant_total']}" if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'])
-        # --- Punto 6: Aplicando formato a métricas ---
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1: st.metric(label="🏆 Nuestra Posición", value=kpis['posicion_str'])
         with col2: st.metric(label="💲 Nuestro Precio", value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A")
-        with col3: st.metric(label="🥇 Precio Líder (contexto)", value=format_price(kpis['precio_lider']) if kpis['precio_lider'] > 0 else "N/A")
+        with col3: st.metric(label="🥇 Precio Líder", value=format_price(kpis['precio_lider']) if kpis['precio_lider'] > 0 else "N/A")
         with col4:
             if nuestro_precio_display > 0 and kpis['precio_lider'] > 0:
-                dif_vs_lider = nuestro_precio_display - kpis['precio_lider']
                 delta_text = f"{format_price(nuestro_precio_display - nuestro_precio_real)} vs. real" if modo_simulacion else None
-                st.metric(label="💰 Diferencia vs. Líder", value=format_price(dif_vs_lider), delta=delta_text, delta_color="off")
+                st.metric(label="💰 Dif vs. Líder", value=format_price(nuestro_precio_display - kpis['precio_lider']), delta=delta_text, delta_color="off")
             else:
-                st.metric(label="💰 Diferencia vs. Líder", value="N/A")
+                st.metric(label="💰 Dif vs. Líder", value="N/A")
+        
+        with col5:
+            if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
+                cambio_puestos = posicion_num_hoy - posicion_num_ayer
+                if cambio_puestos < 0: # Mejoramos (ej: de 5 a 3, -2)
+                    st.metric(label="📈 Escalador Diario", value=f"#{posicion_num_hoy}", delta=f"▾ {abs(cambio_puestos)} Puestos", delta_color="normal")
+                elif cambio_puestos > 0: # Empeoramos (ej: de 3 a 5, +2)
+                    st.metric(label="📈 Escalador Diario", value=f"#{posicion_num_hoy}", delta=f"▴ {abs(cambio_puestos)} Puestos", delta_color="inverse")
+                else:
+                    st.metric(label="📈 Escalador Diario", value=f"#{posicion_num_hoy}", delta="Sin cambios")
+            else:
+                st.metric(label="📈 Escalador Diario", value="-", help="Sin datos del día anterior para comparar")
+
         st.markdown("---")
         
-        # --- Punto 1: Gráficos uno al lado del otro ---
         graph_col1, graph_col2 = st.columns(2)
 
         with graph_col1:
@@ -411,16 +435,17 @@ def run_dashboard():
                 df_plot = df_contexto_display[['nombre_vendedor', 'precio']].copy()
                 df_plot['tipo'] = 'Competidor'
 
-                # --- Lógica mejorada para manejar el caso de ser líder ---
                 somos_lider = (NUESTRO_SELLER_NAME == kpis['nombre_lider'])
 
+                df_plot['sort_priority'] = 2 
+                df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'sort_priority'] = 0
+                
                 if somos_lider:
-                    # Si somos el líder, usamos una etiqueta especial y una paleta de colores adaptada
                     df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa (Líder)'
                     domain = ['Nuestra Empresa (Líder)', 'Competidor']
-                    range_ = ['#2ECC71', '#3498DB'] # Verde para nosotros (líder), azul para competidores
+                    range_ = ['#2ECC71', '#3498DB']
                 else:
-                    # Si no somos el líder, la lógica original aplica
+                    df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'sort_priority'] = 1
                     df_plot.loc[df_plot['nombre_vendedor'] == NUESTRO_SELLER_NAME, 'tipo'] = 'Nuestra Empresa'
                     df_plot.loc[df_plot['nombre_vendedor'] == kpis['nombre_lider'], 'tipo'] = 'Líder'
                     domain = ['Líder', 'Nuestra Empresa', 'Competidor']
@@ -431,7 +456,11 @@ def run_dashboard():
                 chart = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
                     x=alt.X('precio:Q', title='Precio', 
                             axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
-                    y=alt.Y('nombre_vendedor:N', title=None, sort='-x'),
+                    y=alt.Y('nombre_vendedor:N', title=None, 
+                            sort=alt.Sort([
+                                alt.SortField(field='precio', op='min', order='ascending'),
+                                alt.SortField(field='sort_priority', op='min', order='ascending')
+                            ])),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
@@ -447,13 +476,11 @@ def run_dashboard():
                 if df_grafico_tendencia is not None and not df_grafico_tendencia.empty:
                     df_altair = df_grafico_tendencia.reset_index().melt('fecha_extraccion', var_name='serie', value_name='precio').dropna()
                     
-                    # --- Punto 6: Formato para tooltip del gráfico ---
                     df_altair['precio_formateado'] = df_altair['precio'].apply(format_price)
 
                     base = alt.Chart(df_altair).mark_line(point=True).encode(
                         x=alt.X('fecha_extraccion:T', axis=alt.Axis(format='%d/%m', title='Fecha', labelAngle=0)),
                         y=alt.Y('precio:Q', title='Precio',
-                                # --- Punto 6: Formato para eje del gráfico ---
                                 axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
                         color=alt.Color('serie:N', scale=alt.Scale(domain=df_grafico_tendencia.columns.tolist(), range=colores_tendencia), legend=alt.Legend(title="Vendedor", orient="top")),
                         tooltip=[alt.Tooltip('serie', title='Vendedor'), alt.Tooltip('fecha_extraccion:T', title='Fecha', format='%d/%m/%Y'), alt.Tooltip('precio_formateado', title='Precio')]
@@ -468,12 +495,11 @@ def run_dashboard():
         st.markdown("---")
         st.subheader("Asistente Estratégico IA")
         
-        # --- Punto 2: Botones uno al lado del otro ---
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             if st.button("🧠 Analizar Escenario con IA", use_container_width=True):
                 with st.spinner("Contactando al estratega IA..."):
-                    pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if len(df_contexto_display) > 0 else 0
+                    pct_full_contexto = (df_contexto_display['envio_full'].sum() / len(df_contexto_display)) * 100 if not df_contexto_display.empty else 0
                     contexto_ia = {
                         "producto": producto_seleccionado, "nuestro_seller": NUESTRO_SELLER_NAME,
                         "nuestro_precio": nuestro_precio_display, "posicion": kpis['posicion_num'] if kpis['posicion_num'] != 'N/A' else kpis['posicion_str'],
@@ -496,9 +522,7 @@ def run_dashboard():
                 columnas_tabla = ['nombre_vendedor', 'precio', 'cuotas_sin_interes', 'envio_full', 'envio_gratis', 'factura_a', 'reputacion_vendedor', 'link_publicacion']
                 columnas_existentes_tabla = [col for col in columnas_tabla if col in df_contexto_display.columns]
                 
-                # Preparamos una copia del dataframe para no alterar el original
                 df_tabla_display = df_contexto_display[columnas_existentes_tabla].copy()
-                # --- Punto 6: Aplicando formato a la columna de precio de la tabla ---
                 if 'precio' in df_tabla_display.columns:
                     df_tabla_display['precio'] = df_tabla_display['precio'].apply(format_price)
 
