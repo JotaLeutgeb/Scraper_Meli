@@ -90,12 +90,10 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
         "link_lider": "#"
     }
 
-    # Si no hay datos en el contexto, determinar si es porque no competimos o por los filtros.
     if df_contexto.empty:
         kpis["posicion_str"] = "Fuera de Filtro" if nuestro_precio > 0 else "N/A"
         return kpis
 
-    # Extraer información del líder del mercado de forma segura.
     df_contexto_sorted = df_contexto.sort_values(by=['precio', 'nombre_vendedor'], ascending=True).reset_index(drop=True)
 
     kpis["nombre_lider"] = df_contexto_sorted.iloc[0]['nombre_vendedor']
@@ -105,11 +103,9 @@ def calcular_kpis(df_contexto: pd.DataFrame, nuestro_seller: str, nuestro_precio
     nuestra_pos_info = df_contexto_sorted[df_contexto_sorted['nombre_vendedor'] == nuestro_seller]
 
     if not nuestra_pos_info.empty:
-        # Si nos encontramos, calcular la posición numérica.
         kpis["posicion_num"] = nuestra_pos_info.index[0] + 1
         kpis["posicion_str"] = f"#{kpis['posicion_num']}"
     elif nuestro_precio > 0:
-        # Si no nos encontramos pero tenemos un precio, es que fuimos filtrados.
         kpis["posicion_str"] = "Fuera de Filtro"
 
     return kpis
@@ -188,8 +184,6 @@ def preparar_datos_tendencia(df_hist: pd.DataFrame, nuestro_seller: str):
             colores.append(paleta_competidores[color_index])
 
     return df_para_grafico, colores
-
-
 
 # -----------------------------------------------------------------------------
 # FUNCIÓN DE INTELIGENCIA ARTIFICIAL
@@ -379,7 +373,6 @@ def run_dashboard():
 
         kpis = calcular_kpis(df_contexto_display, NUESTRO_SELLER_NAME, nuestro_precio_display)
 
-        # --- Punto 2: Lógica del Escalador de Posición ---
         posicion_num_hoy = kpis['posicion_num']
         posicion_num_ayer = "N/A"
         fecha_ayer = fecha_seleccionada - datetime.timedelta(days=1)
@@ -402,8 +395,30 @@ def run_dashboard():
         st.caption(f"Fecha de análisis: {fecha_seleccionada.strftime('%d/%m/%Y')}")
         st.markdown("---")
 
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1: st.metric(label="🏆 Nuestra Posición", value=kpis['posicion_str'])
+        # --- Métricas con Escalador Integrado ---
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            delta_text_posicion = None
+            delta_color_val = "normal"
+            if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
+                cambio_puestos = posicion_num_hoy - posicion_num_ayer
+                if cambio_puestos < 0:
+                    delta_text_posicion = f"▾ {abs(cambio_puestos)} vs ayer"
+                    delta_color_val = "normal"
+                elif cambio_puestos > 0:
+                    delta_text_posicion = f"▴ {abs(cambio_puestos)} vs ayer"
+                    delta_color_val = "inverse"
+                else:
+                    delta_text_posicion = "Sin cambios"
+                    delta_color_val = "off"
+            
+            st.metric(
+                label="🏆 Nuestra Posición", 
+                value=kpis['posicion_str'], 
+                delta=delta_text_posicion, 
+                delta_color=delta_color_val,
+                help="Indica el cambio de posición respecto al día anterior bajo los mismos filtros."
+            )
         with col2: st.metric(label="💲 Nuestro Precio", value=format_price(nuestro_precio_display) if nuestro_precio_display > 0 else "N/A")
         with col3: st.metric(label="🥇 Precio Líder", value=format_price(kpis['precio_lider']) if kpis['precio_lider'] > 0 else "N/A")
         with col4:
@@ -412,18 +427,6 @@ def run_dashboard():
                 st.metric(label="💰 Dif vs. Líder", value=format_price(nuestro_precio_display - kpis['precio_lider']), delta=delta_text, delta_color="off")
             else:
                 st.metric(label="💰 Dif vs. Líder", value="N/A")
-        
-        with col5:
-            if isinstance(posicion_num_hoy, int) and isinstance(posicion_num_ayer, int):
-                cambio_puestos = posicion_num_hoy - posicion_num_ayer
-                if cambio_puestos < 0: # Mejoramos (ej: de 5 a 3, -2)
-                    st.metric(label="📈 Escalador Diario", value=f"#{posicion_num_hoy}", delta=f"▾ {abs(cambio_puestos)} Puestos", delta_color="normal")
-                elif cambio_puestos > 0: # Empeoramos (ej: de 3 a 5, +2)
-                    st.metric(label="📈 Escalador Diario", value=f"#{posicion_num_hoy}", delta=f"▴ {abs(cambio_puestos)} Puestos", delta_color="inverse")
-                else:
-                    st.metric(label="📈 Escalador Diario", value=f"#{posicion_num_hoy}", delta="Sin cambios")
-            else:
-                st.metric(label="📈 Escalador Diario", value="-", help="Sin datos del día anterior para comparar")
 
         st.markdown("---")
         
