@@ -295,13 +295,20 @@ def obtener_sugerencia_ia(contexto: dict):
 
 def highlight_nuestro_seller(row, seller_name_to_highlight: str):
     """
-    Resalta solo la celda de 'nombre_vendedor' en verde y negrita.
+    Resalta el texto de las columnas de texto clave en verde y negrita,
+    ignorando las columnas con checkboxes para evitar errores de renderizado.
     """
     styles = [''] * len(row)  # Por defecto, sin estilo
     if row['nombre_vendedor'] == seller_name_to_highlight:
-        # Encuentra el índice de la columna 'nombre_vendedor' y aplica estilo solo allí
-        idx = row.index.get_loc('nombre_vendedor')
-        styles[idx] = 'color: #2ECC71; font-weight: bold;'
+        
+        style = 'color: #2ECC71; font-weight: bold;'
+        
+        # Itera sobre todas las columnas de la fila para aplicar estilo
+        for i, col_name in enumerate(row.index):
+            # No aplicar estilo a las columnas que renderizan como checkboxes
+            if col_name not in ['envio_full', 'envio_gratis', 'factura_a']:
+                styles[i] = style
+                
     return styles
 
 # -----------------------------------------------------------------------------
