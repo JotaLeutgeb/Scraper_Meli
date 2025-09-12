@@ -541,15 +541,25 @@ def run_dashboard():
                 # 3. Extraemos la lista de nombres de vendedores en el orden correcto.
                 sort_order = df_sort_logic_sorted['nombre_vendedor'].tolist()
 
+                precio_min = df_plot['precio'].min()
+                precio_max = df_plot['precio'].max()
+                padding = (precio_max - precio_min) * 0.1 if precio_max > precio_min else precio_min * 0.1
+                precio_min_ajustado = max(0, precio_min - padding)
+                precio_max_ajustado = precio_max + padding
+
                 chart_dot = alt.Chart(df_plot).mark_circle(size=120, opacity=0.8).encode(
-                    x=alt.X('precio:Q', title='Precio',
-                            axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")),
-                    # 4. Usamos la lista de orden INVERTIDA para el eje Y, para que el más barato quede abajo.
+                    x=alt.X(
+                        'precio:Q',
+                        title='Precio',
+                        scale=alt.Scale(domain=[precio_min_ajustado, precio_max_ajustado]),
+                        axis=alt.Axis(labelExpr="'$' + replace(format(datum.value, ',.0f'), ',', '.')")
+                    ),
                     y=alt.Y('nombre_vendedor:N', sort=sort_order[::-1], title=None),
                     color=alt.Color('tipo:N', scale=alt.Scale(domain=domain, range=range_),
                                     legend=alt.Legend(title="Leyenda", orient="top")),
                     tooltip=['nombre_vendedor', alt.Tooltip('precio_formateado', title='Precio')]
                 ).properties(height=350).interactive()
+
                 st.altair_chart(chart_dot, use_container_width=True)
             else:
                 st.info("No hay datos para mostrar en el panorama de precios para el contexto seleccionado.")
