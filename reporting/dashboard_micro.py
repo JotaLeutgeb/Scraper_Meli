@@ -333,7 +333,7 @@ def run_dashboard():
     if 'sugerencia_ia' not in st.session_state:
         st.session_state.sugerencia_ia = None
     
-    st.title("Delta Tracking Precios")
+    st.title("Tracking Precios")
 
     try:
         config_cliente = st.secrets["client_config"]
