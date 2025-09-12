@@ -315,7 +315,7 @@ def highlight_nuestro_seller(row, seller_name_to_highlight: str):
 # CONFIGURACIÓN E INTERFAZ DEL DASHBOARD
 def run_dashboard():
     
-    st.set_page_config(layout="wide", page_title="Delta Tracking Precios")
+    st.set_page_config(layout="wide", page_title="Tracking Precios")
 
     st.markdown("""
         <style>
