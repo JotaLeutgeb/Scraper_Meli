@@ -1,4 +1,4 @@
-name: Keep Streamlit App Alive
+name: Keep Delta App Alive
 
 on:
   schedule:
